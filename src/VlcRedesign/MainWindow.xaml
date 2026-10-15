@@ -4,7 +4,7 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         xmlns:ctl="clr-namespace:VlcRedesign.Controls"
         xmlns:vm="clr-namespace:VlcRedesign.ViewModels"
-        Title="VLC Media Player" Width="1280" Height="780" MinWidth="720" MinHeight="460"
+        Title="VLC Media Player" Icon="Assets/app.ico" Width="1280" Height="780" MinWidth="760" MinHeight="480"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         Background="{StaticResource ChromeBrush}" Foreground="{StaticResource TextBrush}"
         FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True"
@@ -83,6 +83,7 @@
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnRowPress"/>
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnRowClick"/>
             <EventSetter Event="MouseRightButtonUp" Handler="OnRowRightClick"/>
             <Setter Property="Template">
@@ -176,7 +177,7 @@
                 <Button Style="{StaticResource CaptionButton}" Click="OnMinimize" ToolTip="Minimize">
                     <ctl:Icon Data="{StaticResource I.Minimize}" Width="14" Height="14" StrokeThickness="1.5"/>
                 </Button>
-                <Button Style="{StaticResource CaptionButton}" Click="OnMaximize" ToolTip="Maximize">
+                <Button x:Name="MaxButton" Style="{StaticResource CaptionButton}" Click="OnMaximize" ToolTip="Maximize">
                     <ctl:Icon x:Name="MaxIcon" Data="{StaticResource I.Maximize}" Width="12" Height="12" StrokeThickness="1.8"/>
                 </Button>
                 <Button Style="{StaticResource CloseCaptionButton}" Click="OnClose" ToolTip="Close">
@@ -265,7 +266,7 @@
                     <Border DockPanel.Dock="Top" Height="1" Background="{StaticResource DividerBrush}" Margin="14,2,12,4"/>
 
                     <Grid>
-                        <ListBox x:Name="PanelList" ItemsSource="{Binding Rows}" ItemContainerStyle="{StaticResource RowContainer}"
+                        <ctl:RowList x:Name="PanelList" ItemsSource="{Binding Rows}" ItemContainerStyle="{StaticResource RowContainer}"
                                  Background="Transparent" BorderThickness="0" Padding="6,0,6,8" Foreground="{StaticResource TextBrush}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
@@ -275,17 +276,18 @@
                                    Visibility="{Binding IsEmpty, Converter={StaticResource Vis}}"/>
                     </Grid>
                 </DockPanel>
-                <GridSplitter x:Name="Splitter" Width="5" HorizontalAlignment="Right" Background="Transparent" ResizeBehavior="CurrentAndNext"
-                              ResizeDirection="Columns" DragCompleted="OnSplitterDragged" Focusable="False"/>
             </Grid>
+            <GridSplitter x:Name="Splitter" Grid.Column="1" Width="5" HorizontalAlignment="Right" Background="Transparent" ResizeBehavior="CurrentAndNext"
+                          ResizeDirection="Columns" DragCompleted="OnSplitterDragged" Focusable="False" Cursor="SizeWE"/>
 
             <!-- Player -->
             <vlc:VideoView x:Name="Video" Grid.Column="2" Background="Black">
                 <Grid x:Name="Overlay" Background="#01000000" AllowDrop="True" Drop="OnDrop"
+                      TextElement.Foreground="{StaticResource TextBrush}" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="13"
                       MouseMove="OnOverlayMouseMove" MouseLeftButtonDown="OnOverlayClick" MouseWheel="OnOverlayWheel">
 
                     <!-- Idle state and audio "now playing" -->
-                    <Grid Background="{StaticResource ContentBrush}" Visibility="{Binding Player.IsIdle, Converter={StaticResource Vis}}">
+                    <Grid Background="{StaticResource ContentBrush}" Visibility="{Binding Player.ShowBackdrop, Converter={StaticResource Vis}}">
                         <Grid Visibility="{Binding Player.HasMedia, Converter={StaticResource Vis}, ConverterParameter=Invert}">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*"/>
@@ -303,11 +305,16 @@
                             </StackPanel>
                         </Grid>
 
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,90"
-                                    Visibility="{Binding Player.HasMedia, Converter={StaticResource Vis}}">
-                            <Grid Width="220" Height="220">
+                        <StackPanel x:Name="NowPlayingCard" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,110"
+                                    Visibility="{Binding Player.ShowNowPlayingCard, Converter={StaticResource Vis}}">
+                            <Grid Width="200" Height="200">
                                 <Border CornerRadius="14" Background="#222">
-                                    <ctl:Icon Data="{StaticResource I.Note}" Width="64" Height="64" Foreground="#4A4A4A" StrokeThickness="1.2"/>
+                                    <Grid>
+                                        <ctl:Icon Data="{StaticResource I.Note}" Width="64" Height="64" Foreground="#4A4A4A" StrokeThickness="1.2"
+                                                  Visibility="{Binding Player.IsVideoCard, Converter={StaticResource Vis}, ConverterParameter=Invert}"/>
+                                        <ctl:Icon Data="{StaticResource I.Film}" Width="64" Height="64" Foreground="#4A4A4A" StrokeThickness="1.2"
+                                                  Visibility="{Binding Player.IsVideoCard, Converter={StaticResource Vis}}"/>
+                                    </Grid>
                                 </Border>
                                 <Border CornerRadius="14">
                                     <Border.Background>
@@ -315,21 +322,24 @@
                                     </Border.Background>
                                 </Border>
                             </Grid>
-                            <TextBlock Text="{Binding Player.Title}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,22,0,0"
+                            <TextBlock Text="{Binding Player.Title}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="24,22,24,0"
                                        MaxWidth="520" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding Player.Subtitle}" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding Player.Subtitle}" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="24,4,24,0"
+                                       MaxWidth="520" TextTrimming="CharacterEllipsis"/>
+                            <Button Style="{StaticResource PillButton}" Content="Play again" HorizontalAlignment="Center" Margin="0,18,0,0"
+                                    Command="{Binding Player.TogglePlayCommand}" Visibility="{Binding Player.IsEnded, Converter={StaticResource Vis}}"/>
                         </StackPanel>
                     </Grid>
 
                     <!-- Error toast -->
-                    <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,18,0,0" CornerRadius="8" Background="#E62A1A1A"
-                            BorderBrush="#5A2A2A" BorderThickness="1" Padding="14,8"
+                    <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="16,18,16,0" CornerRadius="8" Background="#F02A1A1A"
+                            BorderBrush="#5A2A2A" BorderThickness="1" Padding="14,8" IsHitTestVisible="False"
                             Visibility="{Binding Player.Error, Converter={StaticResource Vis}}">
-                        <TextBlock Text="{Binding Player.Error}" Foreground="#FFB4A8"/>
+                        <TextBlock Text="{Binding Player.Error}" Foreground="#FFB4A8" TextWrapping="Wrap" MaxWidth="520"/>
                     </Border>
 
                     <!-- Controls -->
-                    <Border x:Name="ControlsBar" VerticalAlignment="Bottom" Margin="16,0,16,16" MaxWidth="980" CornerRadius="12"
+                    <Border x:Name="ControlsBar" SizeChanged="OnControlsSizeChanged" VerticalAlignment="Bottom" Margin="16,0,16,16" MaxWidth="980" CornerRadius="12"
                             Background="#EB181818" BorderBrush="#2C2C2C" BorderThickness="1" Padding="16,6,16,10"
                             Visibility="{Binding Player.HasMedia, Converter={StaticResource Vis}}">
                         <Grid>
@@ -346,31 +356,32 @@
                                 <TextBlock Text="{Binding Player.TimeText}" FontSize="12" Foreground="{StaticResource Text2Brush}" VerticalAlignment="Center"/>
                                 <Slider x:Name="SeekBar" Grid.Column="1" Style="{StaticResource MediaSlider}" Minimum="0" Maximum="1" Margin="8,0"
                                         Value="{Binding Player.Position, Mode=TwoWay}"
-                                        PreviewMouseLeftButtonDown="OnSeekStart" PreviewMouseLeftButtonUp="OnSeekEnd" ValueChanged="OnSeekMoved"/>
+                                        PreviewMouseLeftButtonDown="OnScrubStart" PreviewMouseMove="OnScrubMove" PreviewMouseLeftButtonUp="OnScrubEnd"
+                                        LostMouseCapture="OnScrubLost" ValueChanged="OnSeekMoved"/>
                                 <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}" FontSize="12" Foreground="{StaticResource Text2Brush}"
                                            VerticalAlignment="Center" HorizontalAlignment="Right"/>
                             </Grid>
 
                             <Grid Grid.Row="1" Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition x:Name="ControlsLeftCol" Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <StackPanel x:Name="ControlsTitle" VerticalAlignment="Center" Margin="0,0,12,0">
                                     <TextBlock Text="{Binding Player.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding Player.Subtitle}" FontSize="12" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ToggleButton Style="{StaticResource IconButton}" Width="32" Height="32" Padding="8" IsChecked="{Binding Player.Shuffle}" ToolTip="Shuffle">
+                                    <ToggleButton x:Name="ShuffleButton" Style="{StaticResource AccentToggle}" Width="32" Height="32" Padding="8" IsChecked="{Binding Player.Shuffle}" ToolTip="Shuffle">
                                         <ctl:Icon Data="{StaticResource I.Shuffle}" StrokeThickness="1.8"/>
                                     </ToggleButton>
                                     <Button Style="{StaticResource IconButton}" Width="36" Height="36" Padding="9" Margin="6,0" Command="{Binding Player.PreviousCommand}" ToolTip="Previous (P)">
                                         <ctl:Icon Data="{StaticResource I.Prev}" Filled="True"/>
                                     </Button>
-                                    <Button Style="{StaticResource PlayButton}" Command="{Binding Player.TogglePlayCommand}" ToolTip="Play/Pause (Space)">
+                                    <Button x:Name="PlayButton" Style="{StaticResource PlayButton}" Command="{Binding Player.TogglePlayCommand}" ToolTip="Play (Space)">
                                         <ctl:Icon x:Name="PlayIcon" Data="{StaticResource I.Play}" Filled="True"/>
                                     </Button>
                                     <Button Style="{StaticResource IconButton}" Width="36" Height="36" Padding="9" Margin="6,0" Command="{Binding Player.NextCommand}" ToolTip="Next (N)">
@@ -388,13 +399,14 @@
                                     <Button Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Click="OnTracksMenu" ToolTip="Subtitles, audio and speed">
                                         <ctl:Icon Data="{StaticResource I.Subtitles}" StrokeThickness="1.8"/>
                                     </Button>
-                                    <Button Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding Player.ToggleMuteCommand}" ToolTip="Mute (M)">
+                                    <Button x:Name="MuteButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding Player.ToggleMuteCommand}" ToolTip="Mute (M)">
                                         <ctl:Icon x:Name="VolumeIcon" Data="{StaticResource I.Volume}" StrokeThickness="1.8"/>
                                     </Button>
-                                    <Slider Style="{StaticResource MediaSlider}" Width="90" Minimum="0" Maximum="125" Margin="2,0,8,0" VerticalAlignment="Center"
+                                    <Slider x:Name="VolumeBar" Style="{StaticResource MediaSlider}" Width="90" Minimum="0" Maximum="125" Margin="2,0,8,0" VerticalAlignment="Center"
                                             IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Player.Volume, Mode=TwoWay}"
+                                            PreviewMouseLeftButtonDown="OnScrubStart" PreviewMouseMove="OnScrubMove" PreviewMouseLeftButtonUp="OnScrubEnd" LostMouseCapture="OnScrubLost"
                                             ToolTip="{Binding Player.Volume}" ToolTipService.Placement="Top"/>
-                                    <Button Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding ToggleFullscreenCommand}" ToolTip="Fullscreen (F)">
+                                    <Button x:Name="FullscreenButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding ToggleFullscreenCommand}" ToolTip="Fullscreen (F)">
                                         <ctl:Icon x:Name="FullscreenIcon" Data="{StaticResource I.Fullscreen}" StrokeThickness="1.8"/>
                                     </Button>
                                 </StackPanel>

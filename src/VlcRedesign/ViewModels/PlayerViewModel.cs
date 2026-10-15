@@ -19,6 +19,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     private readonly LibraryStore _store;
     private readonly Dispatcher _ui;
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _messageTimer;
     private readonly Random _random = new();
     private List<string> _queue = new();
     private int _index = -1;
@@ -47,15 +48,24 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private RepeatMode _repeat;
     [ObservableProperty] private string? _sourceLabel;
     [ObservableProperty] private string? _error;
+    [ObservableProperty] private bool _isEnded;
+    [ObservableProperty] private MediaKind _kind;
 
     public Func<PanelPage>? SourcePage { get; private set; }
     public bool IsSeeking { get; set; }
-    public bool IsIdle => !HasVideo;
-    public bool IsAudioView => HasMedia && !HasVideo;
+
+    /// <summary>The library-coloured backdrop: shown unless video is on screen, or a video is still opening (black then).</summary>
+    public bool ShowBackdrop => !HasVideo && !(HasMedia && Kind == MediaKind.Video && !IsEnded && Error is null);
+
+    /// <summary>The "now playing" card: audio and streams without video, or a video that ended or failed.</summary>
+    public bool ShowNowPlayingCard => HasMedia && ShowBackdrop;
+
+    public bool IsVideoCard => Kind == MediaKind.Video;
 
     public event Action? NowPlayingChanged;
     public event Action? ThumbnailUpdated;
     public event Action? OpenRequested;
+    public event Action? PlaybackStopped;
 
     public PlayerViewModel(LibraryStore store, Dispatcher ui)
     {
@@ -64,27 +74,98 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         LibVLC = new LibVLC("--no-video-title-show", "--no-snapshot-preview");
         Player = new MediaPlayer(LibVLC) { EnableHardwareDecoding = true };
 
-        Player.Playing += (_, _) => _ui.BeginInvoke(() => { IsPlaying = true; Error = null; });
-        Player.Paused += (_, _) => _ui.BeginInvoke(() => IsPlaying = false);
+        Player.Playing += (_, _) => _ui.BeginInvoke(OnPlaying);
+        Player.Paused += (_, _) => _ui.BeginInvoke(() =>
+        {
+            IsPlaying = false;
+            SaveProgress();
+            PlaybackStopped?.Invoke();
+        });
         Player.Stopped += (_, _) => _ui.BeginInvoke(() => IsPlaying = false);
         Player.EndReached += (_, _) => _ui.BeginInvoke(OnEnded);
-        Player.EncounteredError += (_, _) => _ui.BeginInvoke(() => { IsPlaying = false; Error = "VLC couldn't play this media."; });
+        Player.EncounteredError += (_, _) => _ui.BeginInvoke(OnError);
         Player.Vout += (_, e) => _ui.BeginInvoke(() => HasVideo = e.Count > 0);
 
-        Volume = Math.Clamp(store.Data.Volume, 0, 125);
-        Player.Volume = Volume;
+        _volume = Math.Clamp(store.Data.Volume, 0, 125);
 
         _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => Tick(), ui);
         _timer.Start();
+        _messageTimer = new DispatcherTimer(TimeSpan.FromSeconds(6), DispatcherPriority.Normal, (_, _) =>
+        {
+            _messageTimer!.Stop();
+            Error = null;
+        }, ui);
+        _messageTimer.Stop();
     }
 
-    partial void OnHasVideoChanged(bool value)
+    partial void OnHasVideoChanged(bool value) => RaiseCoverState();
+    partial void OnHasMediaChanged(bool value) => RaiseCoverState();
+    partial void OnIsEndedChanged(bool value) => RaiseCoverState();
+    partial void OnErrorChanged(string? value) => RaiseCoverState();
+    partial void OnKindChanged(MediaKind value) => RaiseCoverState();
+
+    private void RaiseCoverState()
     {
-        OnPropertyChanged(nameof(IsIdle));
-        OnPropertyChanged(nameof(IsAudioView));
+        OnPropertyChanged(nameof(ShowBackdrop));
+        OnPropertyChanged(nameof(ShowNowPlayingCard));
+        OnPropertyChanged(nameof(IsVideoCard));
     }
 
-    partial void OnHasMediaChanged(bool value) => OnPropertyChanged(nameof(IsAudioView));
+    /// <summary>Shows a short message over the player that clears itself.</summary>
+    public void ShowMessage(string message)
+    {
+        Error = message;
+        _messageTimer.Stop();
+        _messageTimer.Start();
+    }
+
+    private void OnPlaying()
+    {
+        IsPlaying = true;
+        IsEnded = false;
+        // libVLC ignores volume, mute and rate until an audio output exists, so apply them once playback starts.
+        Player.Volume = Volume;
+        Player.Mute = IsMuted;
+        if (Math.Abs(Player.Rate - Rate) > 0.001f) Player.SetRate(Rate);
+        ReadPlayingMetadata();
+    }
+
+    /// <summary>Files opened outside the music library and streams only get their tags once libVLC has opened them.</summary>
+    private void ReadPlayingMetadata()
+    {
+        if (Kind == MediaKind.Video || _store.MetaFor(CurrentPath ?? "") != null) return;
+        using var media = Player.Media;
+        if (media is null) return;
+
+        var title = media.Meta(MetadataType.NowPlaying) is { Length: > 0 } np && Kind == MediaKind.Stream ? np : media.Meta(MetadataType.Title);
+        var artist = media.Meta(MetadataType.Artist);
+        var artwork = media.Meta(MetadataType.ArtworkURL);
+        // Untagged files report their file name as the title; keep the cleaner display name then.
+        var fileName = Kind == MediaKind.Stream ? null : Path.GetFileName(CurrentPath);
+        if (!string.IsNullOrWhiteSpace(title) && title != CurrentPath && !string.Equals(title, fileName, StringComparison.OrdinalIgnoreCase))
+        {
+            Title = title;
+            if (_entry != null) _entry.Title = title;
+        }
+        if (!string.IsNullOrWhiteSpace(artist)) Subtitle = artist;
+        if (!string.IsNullOrWhiteSpace(artwork)) Artwork = artwork;
+    }
+
+    private void OnError()
+    {
+        IsPlaying = false;
+        var failed = Title;
+        if (TryAdvance(1, wrap: false))
+        {
+            PlayCurrent();
+            ShowMessage($"Skipped “{failed}” — VLC couldn't play it.");
+        }
+        else
+        {
+            _messageTimer.Stop();
+            Error = $"VLC couldn't play “{failed}”.";
+        }
+    }
 
     partial void OnVolumeChanged(int value)
     {
@@ -123,7 +204,8 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         else _queue.Insert(_index + 1, item);
     }
 
-    private void PlayCurrent()
+    /// <param name="startMs">Where to start; by default the saved resume point, if any.</param>
+    private void PlayCurrent(long? startMs = null)
     {
         var path = _queue[_index];
         var kind = MediaScanner.KindOf(path);
@@ -133,10 +215,14 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         using var media = kind == MediaKind.Stream
             ? new Media(LibVLC, new Uri(path))
             : new Media(LibVLC, path, FromType.FromPath);
-        if (kind != MediaKind.Stream && previous is { IsUnfinished: true })
-            media.AddOption(FormattableString.Invariant($":start-time={previous.PositionMs / 1000.0:0.0}"));
+        startMs ??= kind != MediaKind.Stream && previous is { IsUnfinished: true } ? previous.PositionMs : null;
+        if (startMs > 0)
+            media.AddOption(FormattableString.Invariant($":start-time={startMs.Value / 1000.0:0.0}"));
 
+        _messageTimer.Stop();
         Error = null;
+        IsEnded = false;
+        Kind = kind;
         HasVideo = false;
         Position = 0;
         TimeText = "0:00";
@@ -153,7 +239,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Artwork = meta?.Artwork;
         _entry = _store.TouchHistory(path, kind, Title);
         _lastSave = DateTime.Now;
-        _lastSnapshot = DateTime.Now;
+        _lastSnapshot = DateTime.MinValue;
 
         Player.Play(media);
         _store.Save();
@@ -184,10 +270,16 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         if (_entry != null && _entry.DurationMs > 0) _entry.PositionMs = _entry.DurationMs;
         IsPlaying = false;
         Position = 1;
+        TimeText = DurationText;
 
         if (Repeat == RepeatMode.One) PlayCurrent();
         else if (TryAdvance(1, Repeat == RepeatMode.All)) PlayCurrent();
-        else _store.Save();
+        else
+        {
+            IsEnded = true;
+            _store.Save();
+            PlaybackStopped?.Invoke();
+        }
     }
 
     // ---- Transport ----
@@ -218,28 +310,36 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public void Previous()
     {
         if (_queue.Count == 0) return;
-        if (Player.Time > 3000)
+        if (Player.Time > 3000 && !IsEnded)
         {
             Player.Time = 0;
             return;
         }
         SaveProgress();
-        if (TryAdvance(-1, Repeat == RepeatMode.All)) PlayCurrent();
-        else Player.Time = 0;
+        // At the start of the queue (and not repeating) this restarts the current item.
+        TryAdvance(-1, Repeat == RepeatMode.All);
+        PlayCurrent(0);
     }
 
     [RelayCommand]
     public void Stop()
     {
+        if (!HasMedia) return;
         SaveProgress();
         Player.Stop();
         HasMedia = false;
         HasVideo = false;
         IsPlaying = false;
+        IsEnded = false;
         CurrentPath = null;
         Title = "";
+        Subtitle = "";
+        Artwork = null;
         Position = 0;
+        _messageTimer.Stop();
+        Error = null;
         NowPlayingChanged?.Invoke();
+        PlaybackStopped?.Invoke();
     }
 
     [RelayCommand] private void ToggleMute() => IsMuted = !IsMuted;
@@ -250,9 +350,11 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     {
         if (!HasMedia || !Player.IsSeekable) return;
         fraction = Math.Clamp(fraction, 0, 1);
-        if (Player.State == VLCState.Ended)
+        if (IsEnded || Player.State is VLCState.Ended or VLCState.Stopped)
         {
-            PlayCurrent();
+            // Seeking after the end restarts the item at the chosen point.
+            var length = _entry?.DurationMs ?? 0;
+            PlayCurrent((long)(length * fraction));
             return;
         }
         Player.Position = (float)fraction;
@@ -284,14 +386,18 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public void SetAudioTrack(int id) => Player.SetAudioTrack(id);
     public void SetSubtitleTrack(int id) => Player.SetSpu(id);
 
-    public void AddSubtitleFile(string file) =>
-        Player.AddSlave(MediaSlaveType.Subtitle, new Uri(file).AbsoluteUri, true);
+    public void AddSubtitleFile(string file)
+    {
+        if (!HasMedia) return;
+        if (!Player.AddSlave(MediaSlaveType.Subtitle, new Uri(file).AbsoluteUri, true))
+            ShowMessage("Couldn't load that subtitle file.");
+    }
 
     // ---- Progress, resume points and thumbnails ----
 
     private void Tick()
     {
-        if (!HasMedia || _disposed) return;
+        if (!HasMedia || _disposed || IsEnded) return;
         var length = Player.Length;
         var time = Player.Time;
 
@@ -315,7 +421,8 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             _store.Save();
         }
 
-        if (HasVideo && IsPlaying && _entry is { Kind: MediaKind.Video } && time > 8000 && (now - _lastSnapshot).TotalSeconds > 45)
+        // First thumbnail a few seconds in (past black intros), then refresh it every 45 s.
+        if (HasVideo && IsPlaying && _entry is { Kind: MediaKind.Video } && time > 5000 && (now - _lastSnapshot).TotalSeconds > 45)
             TakeThumbnail(_entry, now);
     }
 

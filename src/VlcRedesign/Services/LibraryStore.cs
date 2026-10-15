@@ -59,6 +59,11 @@ public sealed class LibraryData
     public int Volume { get; set; } = 80;
     public bool PanelOpen { get; set; } = true;
     public double PanelWidth { get; set; } = 280;
+    public double WindowLeft { get; set; }
+    public double WindowTop { get; set; }
+    public double WindowWidth { get; set; }
+    public double WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
 }
 
 /// <summary>Library, playlists and history, persisted as JSON in %APPDATA%\VlcRedesign.</summary>

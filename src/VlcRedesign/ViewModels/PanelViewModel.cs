@@ -19,6 +19,9 @@ public sealed record MenuAction(string Label, Action? Run = null, IReadOnlyList<
 public abstract class PanelRow : ObservableObject
 {
     public virtual bool IsSection => false;
+
+    /// <summary>What clicking the row does.</summary>
+    public abstract void Activate();
 }
 
 /// <summary>Bold heading inside a page, e.g. "Continue Watching ›".</summary>
@@ -28,6 +31,8 @@ public sealed class SectionRow : PanelRow
     public string Title { get; init; } = "";
     public Action? Open { get; init; }
     public bool HasOpen => Open != null;
+
+    public override void Activate() => Open?.Invoke();
 }
 
 public sealed class ItemRow : PanelRow
@@ -45,6 +50,8 @@ public sealed class ItemRow : PanelRow
 
     public bool HasThumbnail => Thumbnail != null;
 
+    public override void Activate() => Invoke?.Invoke();
+
     public bool IsCurrent
     {
         get => _isCurrent;
@@ -54,6 +61,8 @@ public sealed class ItemRow : PanelRow
 
 public sealed class PanelPage
 {
+    /// <summary>Set on the rail's top-level pages ("root:music"), so they can be told apart from folders with the same name.</summary>
+    public string? Id { get; init; }
     public string Title { get; init; } = "";
     public string RailKey { get; init; } = "";
     public List<PanelRow> Rows { get; init; } = new();
@@ -79,7 +88,14 @@ public sealed partial class PanelViewModel : ObservableObject
     [ObservableProperty] private bool _isEmpty;
     [ObservableProperty] private string _emptyText = "";
 
-    public ObservableCollection<PanelRow> Rows { get; } = new();
+    /// <summary>Replaced as a whole (one change notification) rather than edited row by row.</summary>
+    [ObservableProperty] private IReadOnlyList<PanelRow> _rows = Array.Empty<PanelRow>();
+
+    private bool _suppressApply;
+
+    /// <summary>Raised around in-place refreshes so the view can keep its scroll position.</summary>
+    public event Action? Refreshing;
+    public event Action? Refreshed;
 
     public bool CanGoBack => _back.Count > 0;
     public bool CanGoForward => _forward.Count > 0;
@@ -98,8 +114,10 @@ public sealed partial class PanelViewModel : ObservableObject
     public void Refresh()
     {
         if (_current == null) return;
+        Refreshing?.Invoke();
         Page = _current();
         Apply();
+        Refreshed?.Invoke();
     }
 
     public string? CurrentMediaPath
@@ -146,7 +164,10 @@ public sealed partial class PanelViewModel : ObservableObject
         if (!IsSearchOpen) SearchText = "";
     }
 
-    partial void OnSearchTextChanged(string value) => Apply();
+    partial void OnSearchTextChanged(string value)
+    {
+        if (!_suppressApply) Apply();
+    }
 
     partial void OnSortModeChanged(int value)
     {
@@ -157,8 +178,10 @@ public sealed partial class PanelViewModel : ObservableObject
     private void Show(Func<PanelPage> factory)
     {
         _current = factory;
+        _suppressApply = true;
         IsSearchOpen = false;
         SearchText = "";
+        _suppressApply = false;
         Page = factory();
         Apply();
         OnPropertyChanged(nameof(CanGoBack));
@@ -185,12 +208,13 @@ public sealed partial class PanelViewModel : ObservableObject
             rows = actions.Concat(items);
         }
 
-        Rows.Clear();
-        foreach (var row in rows) Rows.Add(row);
+        Rows = rows.ToList();
         CurrentMediaPath = _currentMediaPath;
 
         var count = Rows.OfType<ItemRow>().Count(r => !r.IsAction);
-        CountText = count == 1 ? "1 item" : $"{count} items";
+        // A page made only of shortcuts (e.g. Home before anything was played) has nothing to count.
+        var onlyActions = count == 0 && Rows.OfType<ItemRow>().Any();
+        CountText = onlyActions ? "" : count == 1 ? "1 item" : $"{count} items";
         IsEmpty = count == 0;
         EmptyText = query.Length > 0 ? $"Nothing matches “{query}”" : Page.EmptyText ?? "";
     }

@@ -48,7 +48,21 @@ public partial class MainWindow : Window, IUiServices
         _vm.PropertyChanged += OnViewModelChanged;
         _vm.Player.PropertyChanged += OnPlayerChanged;
         _vm.FullscreenToggled += ToggleFullscreen;
-        StateChanged += (_, _) => MaxIcon.Data = (Geometry)FindResource(WindowState == WindowState.Maximized ? "I.Restore" : "I.Maximize");
+        _vm.Panel.Refreshing += () => _scrollBeforeRefresh = ListScroller?.VerticalOffset ?? 0;
+        _vm.Panel.Refreshed += () => Dispatcher.BeginInvoke(() => ListScroller?.ScrollToVerticalOffset(_scrollBeforeRefresh), DispatcherPriority.Loaded);
+        StateChanged += (_, _) =>
+        {
+            var max = WindowState == WindowState.Maximized;
+            MaxIcon.Data = (Geometry)FindResource(max ? "I.Restore" : "I.Maximize");
+            MaxButton.ToolTip = max ? "Restore" : "Maximize";
+        };
+        SizeChanged += (_, _) => { if (_vm.IsPanelWide || PanelCol.ActualWidth > ActualWidth - RailWidth - 240) UpdateColumns(); };
+
+        // Icons that follow player state start from the saved state, not the XAML defaults.
+        foreach (var name in new[] { nameof(PlayerViewModel.IsPlaying), nameof(PlayerViewModel.Volume), nameof(PlayerViewModel.Repeat) })
+            OnPlayerChanged(this, new PropertyChangedEventArgs(name));
+
+        ApplySavedBounds(_vm.Store.Data);
 
         Overlay.Loaded += (_, _) =>
         {
@@ -62,6 +76,45 @@ public partial class MainWindow : Window, IUiServices
             if (_startupFiles.Length > 0) _vm.Play(_startupFiles);
         };
         Closing += OnClosing;
+    }
+
+    private double _scrollBeforeRefresh;
+    private ContextMenu? _openMenu;
+    private Slider? _scrubbing;
+    private object? _pressedRow;
+
+    private ScrollViewer? ListScroller =>
+        VisualTreeHelper.GetChildrenCount(PanelList) > 0 && VisualTreeHelper.GetChild(PanelList, 0) is Border { Child: ScrollViewer sv } ? sv : null;
+
+    // ---- Window size and position ----
+
+    private void ApplySavedBounds(Services.LibraryData data)
+    {
+        if (data.WindowWidth < MinWidth || data.WindowHeight < MinHeight) return;
+        // Only restore a position that is still on a connected screen.
+        var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        var bounds = new Rect(data.WindowLeft, data.WindowTop, data.WindowWidth, data.WindowHeight);
+        if (!screen.IntersectsWith(new Rect(bounds.Left, bounds.Top, bounds.Width, 40))) return;
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = bounds.Left;
+        Top = bounds.Top;
+        Width = bounds.Width;
+        Height = bounds.Height;
+        if (data.WindowMaximized) WindowState = WindowState.Maximized;
+    }
+
+    private void SaveBounds(Services.LibraryData data)
+    {
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        if (bounds.IsEmpty) return;
+        data.WindowLeft = bounds.Left;
+        data.WindowTop = bounds.Top;
+        data.WindowWidth = bounds.Width;
+        data.WindowHeight = bounds.Height;
+        data.WindowMaximized = WindowState == WindowState.Maximized && !_vm.IsFullscreen
+            || _vm.IsFullscreen && _stateBeforeFullscreen == WindowState.Maximized;
     }
 
     // ---- Layout ----
@@ -82,12 +135,14 @@ public partial class MainWindow : Window, IUiServices
         RailCol.Width = new GridLength(fullscreen ? 0 : RailWidth);
         RailPanel.Visibility = fullscreen ? Visibility.Collapsed : Visibility.Visible;
         LibraryPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        Splitter.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
 
         var width = _vm.Store.Data.PanelWidth;
         if (_vm.IsPanelWide) width = Math.Max(width * 2, (ActualWidth - RailWidth) * 0.55);
         PanelCol.MinWidth = open ? MinPanelWidth : 0;
         PanelCol.Width = new GridLength(open ? Math.Clamp(width, MinPanelWidth, Math.Max(MinPanelWidth, ActualWidth - RailWidth - 240)) : 0);
         FullscreenIcon.Data = (Geometry)FindResource(fullscreen ? "I.ExitFullscreen" : "I.Fullscreen");
+        FullscreenButton.ToolTip = fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen (F)";
     }
 
     private void OnSplitterDragged(object sender, DragCompletedEventArgs e)
@@ -123,6 +178,7 @@ public partial class MainWindow : Window, IUiServices
         {
             case nameof(PlayerViewModel.IsPlaying):
                 PlayIcon.Data = (Geometry)FindResource(p.IsPlaying ? "I.Pause" : "I.Play");
+                PlayButton.ToolTip = p.IsPlaying ? "Pause (Space)" : "Play (Space)";
                 ShowControls();
                 break;
             case nameof(PlayerViewModel.Title):
@@ -133,6 +189,7 @@ public partial class MainWindow : Window, IUiServices
             case nameof(PlayerViewModel.Volume):
             case nameof(PlayerViewModel.IsMuted):
                 VolumeIcon.Data = (Geometry)FindResource(p.IsMuted || p.Volume == 0 ? "I.Mute" : p.Volume < 50 ? "I.VolumeLow" : "I.Volume");
+                MuteButton.ToolTip = p.IsMuted ? "Unmute (M)" : "Mute (M)";
                 break;
             case nameof(PlayerViewModel.Repeat):
                 RepeatButton.Foreground = p.Repeat == RepeatMode.Off ? (Brush)FindResource("Text2Brush") : (Brush)FindResource("AccentBrush");
@@ -162,7 +219,11 @@ public partial class MainWindow : Window, IUiServices
     {
         _hideControls.Stop();
         var p = _vm.Player;
-        if (!p.HasVideo || !p.IsPlaying || ControlsBar.IsMouseOver || ControlsBar.ContextMenu?.IsOpen == true) return;
+        if (!p.HasVideo || !p.IsPlaying || ControlsBar.IsMouseOver || _openMenu?.IsOpen == true || _scrubbing != null)
+        {
+            if (p.HasVideo && p.IsPlaying) _hideControls.Start(); // check again later
+            return;
+        }
         _controlsVisible = false;
         ControlsBar.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)));
         Overlay.Cursor = Cursors.None;
@@ -199,12 +260,45 @@ public partial class MainWindow : Window, IUiServices
 
     // ---- Seeking ----
 
-    private void OnSeekStart(object sender, MouseButtonEventArgs e) => _vm.Player.IsSeeking = true;
-
-    private void OnSeekEnd(object sender, MouseButtonEventArgs e)
+    private void OnScrubStart(object sender, MouseButtonEventArgs e)
     {
-        _vm.Player.Seek(SeekBar.Value);
-        _vm.Player.IsSeeking = false;
+        if (sender is not Slider slider) return;
+        _scrubbing = slider;
+        if (slider == SeekBar) _vm.Player.IsSeeking = true;
+        slider.CaptureMouse();
+        ScrubTo(slider, e);
+        e.Handled = true;
+    }
+
+    private void OnScrubMove(object sender, MouseEventArgs e)
+    {
+        if (_scrubbing == sender && e.LeftButton == MouseButtonState.Pressed) ScrubTo(_scrubbing, e);
+    }
+
+    private void OnScrubEnd(object sender, MouseButtonEventArgs e)
+    {
+        if (_scrubbing != sender) return;
+        ScrubTo(_scrubbing, e);
+        _scrubbing.ReleaseMouseCapture(); // raises LostMouseCapture, which finishes the seek
+        e.Handled = true;
+    }
+
+    private void OnScrubLost(object sender, MouseEventArgs e)
+    {
+        if (_scrubbing != sender) return;
+        var slider = _scrubbing;
+        _scrubbing = null;
+        if (slider == SeekBar)
+        {
+            _vm.Player.Seek(slider.Value);
+            _vm.Player.IsSeeking = false;
+        }
+    }
+
+    private static void ScrubTo(Slider slider, MouseEventArgs e)
+    {
+        if (slider.Template.FindName("PART_Track", slider) is not Track track) return;
+        slider.Value = Math.Clamp(track.ValueFromPoint(e.GetPosition(track)), slider.Minimum, slider.Maximum);
     }
 
     private void OnSeekMoved(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -225,26 +319,39 @@ public partial class MainWindow : Window, IUiServices
     private void OnTracksMenu(object sender, RoutedEventArgs e)
     {
         _hideControls.Stop();
-        MenuBuilder.Show(_vm.TracksMenu(), (UIElement)sender, PlacementMode.Top);
+        _openMenu = MenuBuilder.Show(_vm.TracksMenu(), (UIElement)sender, PlacementMode.Top);
+        _openMenu.Closed += (_, _) => ShowControls();
+    }
+
+    /// <summary>On a narrow video area, drop the title and volume slider so the transport stays centred and nothing clips.</summary>
+    private void OnControlsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var width = e.NewSize.Width;
+        var compact = width < 700;
+        ControlsTitle.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        VolumeBar.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        // Compact: transport on the left, the rest on the right, instead of centring and overlapping.
+        ControlsLeftCol.Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        // Very narrow: shuffle and repeat stay reachable from the tracks/playback menu.
+        var tiny = width < 470;
+        ShuffleButton.Visibility = tiny ? Visibility.Collapsed : Visibility.Visible;
+        RepeatButton.Visibility = tiny ? Visibility.Collapsed : Visibility.Visible;
     }
 
     // ---- Library list ----
 
+    private void OnRowPress(object sender, MouseButtonEventArgs e) =>
+        _pressedRow = (sender as ListBoxItem)?.DataContext;
+
     private void OnRowClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not ListBoxItem { DataContext: PanelRow row }) return;
+        if (sender is not ListBoxItem { DataContext: PanelRow row } || !ReferenceEquals(row, _pressedRow)) return;
+        _pressedRow = null;
         // Run after the click finishes: invoking may rebuild the list this item belongs to.
         Dispatcher.BeginInvoke(() => Invoke(row));
     }
 
-    private static void Invoke(PanelRow row)
-    {
-        switch (row)
-        {
-            case ItemRow item: item.Invoke?.Invoke(); break;
-            case SectionRow section: section.Open?.Invoke(); break;
-        }
-    }
+    private static void Invoke(PanelRow row) => row.Activate();
 
     private void OnRowRightClick(object sender, MouseButtonEventArgs e)
     {
@@ -266,6 +373,7 @@ public partial class MainWindow : Window, IUiServices
     private void OnSearchToggled(object sender, RoutedEventArgs e)
     {
         if (_vm.Panel.IsSearchOpen) Dispatcher.BeginInvoke(() => SearchBox.Focus(), DispatcherPriority.Input);
+        else PanelList.Focus();
     }
 
     // ---- Keyboard ----
@@ -290,10 +398,12 @@ public partial class MainWindow : Window, IUiServices
             case Key.F when ctrl:
                 _vm.IsPanelOpen = true;
                 _vm.Panel.IsSearchOpen = true;
+                Activate(); // focus may be in the video overlay window
                 Dispatcher.BeginInvoke(() => SearchBox.Focus(), DispatcherPriority.Input);
                 break;
             case Key.Left when alt: _vm.Panel.BackCommand.Execute(null); break;
             case Key.Right when alt: _vm.Panel.ForwardCommand.Execute(null); break;
+            case Key.Back when !typing: _vm.Panel.BackCommand.Execute(null); break;
             case Key.F11: ToggleFullscreen(); break;
             case Key.Escape when _vm.IsFullscreen: ToggleFullscreen(); break;
             case Key.Escape when _vm.Panel.IsSearchOpen: _vm.Panel.ToggleSearchCommand.Execute(null); break;
@@ -353,6 +463,7 @@ public partial class MainWindow : Window, IUiServices
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         _hideControls.Stop();
+        SaveBounds(_vm.Store.Data);
         _vm.Dispose();
     }
 
@@ -393,8 +504,18 @@ public partial class MainWindow : Window, IUiServices
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
+
+        // Windows 11: keep rounded corners and a dark frame despite the custom chrome. Ignored on older Windows.
+        int round = 2 /* DWMWCP_ROUND */, dark = 1, border = 0x00303030;
+        DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref round, sizeof(int));
+        DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref dark, sizeof(int));
+        DwmSetWindowAttribute(hwnd, 34 /* DWMWA_BORDER_COLOR */, ref border, sizeof(int));
     }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {

@@ -74,12 +74,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             RefreshIf("home", "history", "network");
         };
         Player.ThumbnailUpdated += () => RefreshIf("home", "history");
+        // Resume points change when playback pauses or stops; Continue Watching should reflect that.
+        Player.PlaybackStopped += () => RefreshIf("home", "history");
         Player.OpenRequested += () => OpenFiles();
-        _meta.Updated += () => RefreshIf("music");
+
+        // Tag reading reports in batches; rebuilding the list on every batch makes long lists jump.
+        _metaRefresh = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) =>
+        {
+            _metaRefresh!.Stop();
+            RefreshIf("music");
+        }, dispatcher);
+        _metaRefresh.Stop();
+        _meta.Updated += () => { if (!_metaRefresh.IsEnabled) _metaRefresh.Start(); };
 
         Panel.Navigate(HomePage);
         RescanMusic();
     }
+
+    private readonly DispatcherTimer _metaRefresh;
 
     partial void OnIsPanelOpenChanged(bool value) => Store.Data.PanelOpen = value;
 
@@ -94,12 +106,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void SelectRail(RailItem item)
     {
         // Clicking the section that's already showing collapses the panel, like an activity bar.
-        if (item.IsSelected && IsPanelOpen && Panel.Page.Title == item.Label)
+        if (IsPanelOpen && Panel.Page.Id == "root:" + item.Key)
         {
             IsPanelOpen = false;
             return;
         }
         IsPanelOpen = true;
+        // Re-selecting the page that's already showing shouldn't add a duplicate history entry.
+        if (Panel.Page.Id == "root:" + item.Key) return;
         Panel.Navigate(item.Page);
     }
 
@@ -110,9 +124,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenSource()
     {
-        if (Player.SourcePage is null) return;
         IsPanelOpen = true;
-        Panel.Navigate(Player.SourcePage);
+        Panel.Navigate(Player.SourcePage ?? HomePage);
     }
 
     [RelayCommand]
@@ -128,7 +141,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var dir = _ui.PickFolder("Choose a folder to play");
         if (dir is null) return;
         var files = MediaScanner.Expand(new[] { dir });
-        Player.PlayList(files, 0, Path.GetFileName(dir), () => FolderPage(dir));
+        if (files.Count == 0)
+        {
+            Player.ShowMessage($"No playable media in “{FolderTitle(dir)}”.");
+            return;
+        }
+        Player.PlayList(files, 0, FolderTitle(dir), () => FolderPage(dir));
     }
 
     [RelayCommand]
@@ -136,6 +154,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var url = _ui.Prompt("Open network stream", "https://, rtsp://, udp://, …", "", "Play")?.Trim();
         if (string.IsNullOrEmpty(url)) return;
+        // Accept "example.com/live.m3u8" without a scheme.
+        if (!url.Contains("://") && !Path.IsPathRooted(url) && url.Contains('.')) url = "https://" + url;
         if (!Uri.TryCreate(url, UriKind.Absolute, out _))
         {
             _ui.Confirm("Open network stream", $"“{url}” isn't a valid address.", "OK");
@@ -148,12 +168,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void Play(IEnumerable<string> paths)
     {
         var files = MediaScanner.Expand(paths);
-        if (files.Count == 0) return;
+        if (files.Count == 0)
+        {
+            Player.ShowMessage("Nothing playable there.");
+            return;
+        }
         if (files.Count == 1 && File.Exists(files[0])) PlayInFolder(files[0]);
         else Player.PlayList(files, 0, "Opened files");
     }
 
-    public void Enqueue(IEnumerable<string> paths) => Player.Enqueue(MediaScanner.Expand(paths));
+    public void Enqueue(IEnumerable<string> paths)
+    {
+        var files = MediaScanner.Expand(paths);
+        Player.Enqueue(files);
+        if (files.Count > 0) Player.ShowMessage(files.Count == 1 ? "Added to queue." : $"Added {files.Count} items to the queue.");
+    }
+
+    private static string FolderTitle(string dir)
+    {
+        var name = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.IsNullOrEmpty(name) ? dir : name;
+    }
 
     public IReadOnlyList<MenuAction> MainMenu() => new List<MenuAction>
     {
@@ -195,16 +230,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MenuAction> TracksMenu()
     {
         var items = new List<MenuAction>();
-        var subs = Player.SubtitleTracks;
-        items.Add(new MenuAction("Subtitles", Children: subs
-            .Select(t => new MenuAction(t.Id == -1 ? "Off" : t.Name, () => Player.SetSubtitleTrack(t.Id), IsChecked: t.Id == Player.SubtitleTrack))
-            .Append(MenuAction.Separator)
-            .Append(new MenuAction("Add subtitle file…", () =>
+        if (Player.HasMedia)
+        {
+            var subs = Player.SubtitleTracks
+                .Select(t => new MenuAction(t.Id == -1 ? "Off" : t.Name, () => Player.SetSubtitleTrack(t.Id), IsChecked: t.Id == Player.SubtitleTrack))
+                .ToList();
+            if (subs.Count > 0) subs.Add(MenuAction.Separator);
+            subs.Add(new MenuAction("Add subtitle file…", () =>
             {
                 var f = _ui.PickFiles("Subtitles|*.srt;*.ass;*.ssa;*.sub;*.vtt;*.idx|All files|*.*", false);
                 if (f.Length > 0) Player.AddSubtitleFile(f[0]);
-            }))
-            .ToList()));
+            }));
+            items.Add(new MenuAction("Subtitles", Children: subs));
+        }
 
         var audio = Player.AudioTracks;
         if (audio.Count > 0)
@@ -212,8 +250,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Select(t => new MenuAction(t.Id == -1 ? "Disable" : t.Name, () => Player.SetAudioTrack(t.Id), IsChecked: t.Id == Player.AudioTrack))
                 .ToList()));
 
-        items.Add(MenuAction.Separator);
-        items.AddRange(PlaybackMenu().Skip(5));
+        if (items.Count > 0) items.Add(MenuAction.Separator);
+        items.AddRange(PlaybackMenu().Skip(5)); // speed, shuffle, repeat
         return items;
     }
 
@@ -282,7 +320,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             files.Insert(0, path);
             index = 0;
         }
-        Player.PlayList(files, index, Path.GetFileName(dir), () => FolderPage(dir));
+        Player.PlayList(files, index, FolderTitle(dir), () => FolderPage(dir));
     }
 
     private void ShowInExplorer(string path)

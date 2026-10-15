@@ -33,6 +33,12 @@ public sealed class PixelCat : FrameworkElement
 
     private static Brush Freeze(Brush b) { b.Freeze(); return b; }
 
+    public PixelCat()
+    {
+        // Without this, anti-aliasing leaves hairline seams between the "pixels" at fractional DPI scales.
+        RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         int cols = Map[0].Length, rows = Map.Length;
