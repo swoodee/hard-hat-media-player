@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net7.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+
+    <!-- Shown in the .exe's Properties → Details and in Task Manager -->
+    <AssemblyName>HardHatMediaPlayer</AssemblyName>
+    <RootNamespace>HardHatMediaPlayer</RootNamespace>
+    <Product>Hard Hat Media Player</Product>
+    <AssemblyTitle>Hard Hat Media Player</AssemblyTitle>
+    <Description>A free, open-source media player for Windows built on libVLC.</Description>
+    <Company>Hard Hat Media Player contributors</Company>
+    <Copyright>Copyright © 2026 Hard Hat Media Player contributors. Licensed under GPL-3.0-or-later.</Copyright>
+    <Version>0.1.0</Version>
+    <PackageProjectUrl>https://hardhatmediaplayer.com</PackageProjectUrl>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="LibVLCSharp.WPF" Version="3.10.2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="7.0.1" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <!-- Releases built for one architecture (dotnet publish -r win-x64 / win-arm64 / win-x86) ship only that
+       architecture's libVLC instead of all three. Plain debug builds keep all of them. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
+    <VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <VlcWindowsX64Enabled>false</VlcWindowsX64Enabled>
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x86'">
+    <VlcWindowsX64Enabled>false</VlcWindowsX64Enabled>
+    <VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
+  </PropertyGroup>
+
+</Project>

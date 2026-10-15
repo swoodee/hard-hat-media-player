@@ -1,11 +1,11 @@
-# Renders the app mark from src/VlcRedesign/Themes/AppMark.xaml (the same drawing the title bar uses)
+# Renders the app mark from src/HardHatMediaPlayer/Themes/AppMark.xaml (the same drawing the title bar uses)
 # at the standard Windows icon sizes and packs them into a PNG-based .ico.
 #
 #   powershell -File scripts/make-icon.ps1
 #   powershell -File scripts/make-icon.ps1 -Out some/other/app.ico
 param(
-    [string]$Source = (Join-Path $PSScriptRoot '..\src\VlcRedesign\Themes\AppMark.xaml'),
-    [string]$Out = (Join-Path $PSScriptRoot '..\src\VlcRedesign\Assets\app.ico')
+    [string]$Source = (Join-Path $PSScriptRoot '..\src\HardHatMediaPlayer\Themes\AppMark.xaml'),
+    [string]$Out = (Join-Path $PSScriptRoot '..\src\HardHatMediaPlayer\Assets\app.ico')
 )
 
 Add-Type -AssemblyName PresentationCore, PresentationFramework, WindowsBase
