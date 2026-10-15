@@ -118,7 +118,9 @@ public partial class MainWindow : Window, IUiServices
 
     private void SaveBounds(Services.LibraryData data)
     {
-        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        // In fullscreen the window covers the monitor; remember the size it had before.
+        var bounds = _vm.IsFullscreen ? _boundsBeforeFullscreen
+            : WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         if (bounds.IsEmpty) return;
         data.WindowLeft = bounds.Left;
         data.WindowTop = bounds.Top;
@@ -163,15 +165,22 @@ public partial class MainWindow : Window, IUiServices
 
     private void ToggleFullscreen()
     {
+        var hwnd = new WindowInteropHelper(this).Handle;
         if (!_vm.IsFullscreen)
         {
+            if (!GetMonitorRect(hwnd, out var monitor)) return;
             _stateBeforeFullscreen = WindowState;
+            _boundsBeforeFullscreen = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
             _vm.IsFullscreen = true;
-            // No resize frame: the shell only treats frameless monitor-sized windows as fullscreen.
+
+            // Windows keeps the taskbar above *maximized* windows even when they cover the screen.
+            // A normal (un-maximized), frameless window sized exactly to the monitor is treated as
+            // fullscreen and the taskbar steps aside.
             ResizeMode = ResizeMode.NoResize;
-            // Re-maximizing makes Windows ask for the max size again, which now covers the whole monitor.
-            if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal;
-            WindowState = WindowState.Maximized;
+            WindowState = WindowState.Normal;
+            SetFrameStyle(hwnd, fullscreen: true);
+            SetWindowPos(hwnd, IntPtr.Zero, monitor.Left, monitor.Top, monitor.Right - monitor.Left, monitor.Bottom - monitor.Top,
+                SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
             MarkFullscreen(true);
             Activate();
             Topmost = IsActive;
@@ -183,10 +192,35 @@ public partial class MainWindow : Window, IUiServices
             Topmost = false;
             MarkFullscreen(false);
             ResizeMode = ResizeMode.CanResize;
-            WindowState = WindowState.Normal;
+            SetFrameStyle(hwnd, fullscreen: false);
+            if (!_boundsBeforeFullscreen.IsEmpty)
+            {
+                Left = _boundsBeforeFullscreen.Left;
+                Top = _boundsBeforeFullscreen.Top;
+                Width = _boundsBeforeFullscreen.Width;
+                Height = _boundsBeforeFullscreen.Height;
+            }
             if (_stateBeforeFullscreen == WindowState.Maximized) WindowState = WindowState.Maximized;
         }
         ShowControls();
+    }
+
+    private Rect _boundsBeforeFullscreen = Rect.Empty;
+
+    private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
+
+    /// <summary>The full bounds (in physical pixels) of the monitor the window is on.</summary>
+    private static bool GetMonitorRect(IntPtr hwnd, out RECT rect)
+    {
+        rect = default;
+        var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info)) return false;
+        rect = info.rcMonitor;
+        return true;
     }
 
     /// <summary>Tells the taskbar to get out of the way (or come back) for this window and the video overlay.</summary>
@@ -709,10 +743,20 @@ public partial class MainWindow : Window, IUiServices
         var hwnd = new WindowInteropHelper(this).Handle;
         HwndSource.FromHwnd(hwnd)?.AddHook(WndProc);
 
-        // Windows 11: keep rounded corners and a dark frame despite the custom chrome. Ignored on older Windows.
-        int round = 2 /* DWMWCP_ROUND */, dark = 1, border = 0x00303030;
-        DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref round, sizeof(int));
+        int dark = 1;
         DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref dark, sizeof(int));
+        SetFrameStyle(hwnd, fullscreen: false);
+    }
+
+    /// <summary>
+    /// Windows 11 frame: rounded corners and a subtle border in a window, square and borderless in fullscreen
+    /// (otherwise the corners and a grey outline show around the video). Ignored on older Windows.
+    /// </summary>
+    private static void SetFrameStyle(IntPtr hwnd, bool fullscreen)
+    {
+        int corners = fullscreen ? 1 /* DWMWCP_DONOTROUND */ : 2 /* DWMWCP_ROUND */;
+        int border = fullscreen ? unchecked((int)0xFFFFFFFE) /* DWMWA_COLOR_NONE */ : 0x00303030;
+        DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref corners, sizeof(int));
         DwmSetWindowAttribute(hwnd, 34 /* DWMWA_BORDER_COLOR */, ref border, sizeof(int));
     }
 

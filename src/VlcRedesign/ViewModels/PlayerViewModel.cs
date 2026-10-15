@@ -76,7 +76,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     {
         _store = store;
         _ui = ui;
-        LibVLC = new LibVLC("--no-video-title-show", "--no-snapshot-preview");
+        // --no-osd: libVLC would otherwise print messages on the video, e.g. the file path of every
+        // thumbnail snapshot. The app shows its own feedback; subtitles are unaffected.
+        LibVLC = new LibVLC("--no-video-title-show", "--no-snapshot-preview", "--no-osd");
         Player = new MediaPlayer(LibVLC) { EnableHardwareDecoding = true };
 
         Player.Playing += (_, _) => _ui.BeginInvoke(OnPlaying);

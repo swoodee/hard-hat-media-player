@@ -58,6 +58,7 @@ used the old opensubtitles.org XML-RPC API, which has been shut down for third-p
 | Alt+← / Alt+→ | Panel back / forward |
 
 Library data (folders, playlists, history, tag cache, thumbnails) lives in `%APPDATA%\VlcRedesign`.
+Set the `VLCREDESIGN_DATA` environment variable to use another folder, e.g. for a portable copy or for testing.
 
 ## Layout
 

@@ -70,8 +70,11 @@ public sealed class LibraryData
 /// <summary>Library, playlists and history, persisted as JSON in %APPDATA%\VlcRedesign.</summary>
 public sealed class LibraryStore
 {
+    /// <summary>%APPDATA%\VlcRedesign, or the folder in VLCREDESIGN_DATA (portable installs, tests).</summary>
     public static readonly string AppDir =
-        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VlcRedesign");
+        Environment.GetEnvironmentVariable("VLCREDESIGN_DATA") is { Length: > 0 } custom
+            ? custom
+            : System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VlcRedesign");
     public static readonly string ThumbDir = System.IO.Path.Combine(AppDir, "thumbs");
 
     private const int MaxHistory = 500;
