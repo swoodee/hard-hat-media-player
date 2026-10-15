@@ -17,7 +17,7 @@ You can pass files or folders on the command line, or drag them onto the window.
 
 ## What's in it
 
-- **Title bar**: app mark (an orange hard hat), main menu (`…`), library-panel toggle, a "playing from" breadcrumb that jumps to the source folder or playlist.
+- **Title bar**: app mark (an orange hard hat, side view), main menu (`…`), library-panel toggle, a "playing from" breadcrumb that jumps to the source folder or playlist.
 - **Icon rail**: Home, Videos, Music, Network, Playlists, History, and `+` to open media. Clicking the active section collapses the panel.
 - **Library panel**: back/forward, page menu, expand, item count, sort, details toggle, search. Right-click any row for Play / Play next / Add to queue / Add to playlist / Show in Explorer.
   - *Home*: Continue Watching (with resume points and thumbnails), Listen Again, Frequently Visited Folders and Playlists.
@@ -78,4 +78,4 @@ src/VlcRedesign/
 - libVLC and LibVLCSharp by VideoLAN, LGPL 2.1+.
 - Icon shapes follow the Lucide style (ISC).
 
-The app uses its own hard-hat mark (regenerate the icon with `scripts/make-icon.ps1`). “VLC” is a VideoLAN trademark, so rename the app before distributing it publicly.
+The app uses its own hard-hat mark, drawn in `src/VlcRedesign/Themes/AppMark.xaml`; after changing it, run `scripts/make-icon.ps1` to regenerate `app.ico`. “VLC” is a VideoLAN trademark, so rename the app before distributing it publicly.

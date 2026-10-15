@@ -18,16 +18,6 @@
         <ctl:BoolToVisibility x:Key="Vis"/>
         <ctl:PathToImage x:Key="Img"/>
 
-        <!-- App mark: a hard hat in the interface orange. Same shapes as Assets/app.ico (scripts/make-icon.ps1). -->
-        <DrawingImage x:Key="AppMark">
-            <DrawingImage.Drawing>
-                <DrawingGroup>
-                    <GeometryDrawing Brush="{StaticResource AccentBrush}" Geometry="M4 15 A8 8 0 0 1 20 15 Z"/>
-                    <GeometryDrawing Brush="#FFAA4D" Geometry="M10.2 7.25 Q12 6.6 13.8 7.25 L14.6 15 H9.4 Z"/>
-                    <GeometryDrawing Brush="#D06A00" Geometry="M2.75 15 H21.25 A1.25 1.25 0 0 1 21.25 17.5 H2.75 A1.25 1.25 0 0 1 2.75 15 Z"/>
-                </DrawingGroup>
-            </DrawingImage.Drawing>
-        </DrawingImage>
 
         <!-- Library list rows -->
         <DataTemplate DataType="{x:Type vm:ItemRow}">
@@ -152,7 +142,8 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                <Image Source="{StaticResource AppMark}" Width="21" Height="21" Margin="0,0,7,0"/>
+                <!-- AppMark lives in Themes/AppMark.xaml (also the source of Assets/app.ico) -->
+                <Image Source="{StaticResource AppMark}" Width="24" Height="24" Margin="-2,0,6,0"/>
                 <Button Style="{StaticResource IconButton}" ToolTip="Menu" Click="OnMainMenu" WindowChrome.IsHitTestVisibleInChrome="True">
                     <ctl:Icon Data="{StaticResource I.More}" StrokeThickness="3"/>
                 </Button>

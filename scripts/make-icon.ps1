@@ -1,49 +1,31 @@
-# Renders the app mark (an orange hard hat) at the standard Windows icon sizes and packs them into a
-# PNG-based .ico. The shapes match the "AppMark" drawing in MainWindow.xaml (24x24 design grid).
+# Renders the app mark from src/VlcRedesign/Themes/AppMark.xaml (the same drawing the title bar uses)
+# at the standard Windows icon sizes and packs them into a PNG-based .ico.
 #
-#   powershell -File scripts/make-icon.ps1 -Out src/VlcRedesign/Assets/app.ico
-param([Parameter(Mandatory)][string]$Out)
+#   powershell -File scripts/make-icon.ps1
+#   powershell -File scripts/make-icon.ps1 -Out some/other/app.ico
+param(
+    [string]$Source = (Join-Path $PSScriptRoot '..\src\VlcRedesign\Themes\AppMark.xaml'),
+    [string]$Out = (Join-Path $PSScriptRoot '..\src\VlcRedesign\Assets\app.ico')
+)
 
-Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName PresentationCore, PresentationFramework, WindowsBase
 
-$dome  = [System.Drawing.Color]::FromArgb(255, 0xFF, 0x88, 0x00)  # interface accent
-$ridge = [System.Drawing.Color]::FromArgb(255, 0xFF, 0xAA, 0x4D)
-$brim  = [System.Drawing.Color]::FromArgb(255, 0xD0, 0x6A, 0x00)
-
-function Pt([float]$x, [float]$y) { New-Object System.Drawing.PointF $x, $y }
+$dictionary = [System.Windows.Markup.XamlReader]::Parse([IO.File]::ReadAllText((Resolve-Path $Source)))
+$mark = $dictionary['AppMark']
+if ($mark -isnot [System.Windows.Media.DrawingImage]) { throw "No DrawingImage named AppMark in $Source" }
 
 function Render([int]$size) {
-    $bmp = New-Object System.Drawing.Bitmap $size, $size
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-    $g.ScaleTransform($size / 24.0, $size / 24.0)
-
-    # Dome: top half of a circle centred at (12, 15), radius 8.
-    $b = New-Object System.Drawing.SolidBrush $dome
-    $g.FillPie($b, 4, 7, 16, 16, 180, 180)
-
-    # Ridge down the middle, slightly raised above the dome.
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddBezier((Pt 10.2 7.25), (Pt 11.4 6.8), (Pt 12.6 6.8), (Pt 13.8 7.25))
-    $path.AddLine((Pt 13.8 7.25), (Pt 14.6 15))
-    $path.AddLine((Pt 14.6 15), (Pt 9.4 15))
-    $path.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush $ridge), $path)
-
-    # Brim: rounded bar from x 1.5 to 22.5, y 15 to 17.5.
-    $r = 1.25
-    $brimPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $brimPath.AddArc(1.5, 15, 2 * $r, 2.5, 90, 180)
-    $brimPath.AddArc(22.5 - 2 * $r, 15, 2 * $r, 2.5, 270, 180)
-    $brimPath.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush $brim), $brimPath)
-
-    $g.Dispose()
-    $ms = New-Object IO.MemoryStream
-    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    $bmp.Dispose()
-    , $ms.ToArray()
+    $visual = New-Object System.Windows.Media.DrawingVisual
+    $dc = $visual.RenderOpen()
+    $dc.DrawImage($mark, (New-Object System.Windows.Rect 0, 0, $size, $size))
+    $dc.Close()
+    $bitmap = New-Object System.Windows.Media.Imaging.RenderTargetBitmap $size, $size, 96, 96, ([System.Windows.Media.PixelFormats]::Pbgra32)
+    $bitmap.Render($visual)
+    $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+    $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
+    $stream = New-Object IO.MemoryStream
+    $encoder.Save($stream)
+    , $stream.ToArray()
 }
 
 $sizes = 16, 20, 24, 32, 40, 48, 64, 256
@@ -53,7 +35,7 @@ $ico = [IO.MemoryStream]::new()
 $w = [IO.BinaryWriter]::new($ico)
 $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)   # ICONDIR
 $offset = 6 + 16 * $sizes.Count
-for ($i = 0; $i -lt $sizes.Count; $i++) {                                   # ICONDIRENTRY per size
+for ($i = 0; $i -lt $sizes.Count; $i++) {                                   # one ICONDIRENTRY per size
     $s = $sizes[$i]; $dim = if ($s -ge 256) { 0 } else { $s }
     $w.Write([byte]$dim); $w.Write([byte]$dim); $w.Write([byte]0); $w.Write([byte]0)
     $w.Write([uint16]1); $w.Write([uint16]32)
@@ -62,5 +44,7 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {                                   # IC
 }
 foreach ($img in $images) { $w.Write($img) }
 $w.Flush()
-[IO.File]::WriteAllBytes((Resolve-Path -LiteralPath (Split-Path $Out -Parent)).Path + '\' + (Split-Path $Out -Leaf), $ico.ToArray())
-"wrote $Out ($($ico.Length) bytes)"
+
+$target = [IO.Path]::GetFullPath($Out)
+[IO.File]::WriteAllBytes($target, $ico.ToArray())
+"wrote $target ($($ico.Length) bytes)"
