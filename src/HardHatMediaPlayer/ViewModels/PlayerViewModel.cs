@@ -21,8 +21,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _messageTimer;
     private readonly Random _random = new();
-    private List<string> _queue = new();
     private int _index = -1;
+    /// <summary>The playing item was removed from the queue; <see cref="_index"/> is then the item that followed it.</summary>
+    private bool _detached;
     private HistoryEntry? _entry;
     private DateTime _lastSave;
     private DateTime _lastSnapshot;
@@ -158,6 +159,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         {
             Title = title;
             if (_entry != null) _entry.Title = title;
+            if (CurrentItem is { } item) item.Title = title;
         }
         if (!string.IsNullOrWhiteSpace(artist)) Subtitle = artist;
         if (!string.IsNullOrWhiteSpace(artwork)) Artwork = artwork;
@@ -249,35 +251,163 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 
     // ---- Queue ----
 
+    /// <summary>What plays next, in order. Separate from playlists, which are saved collections.</summary>
+    public QueueCollection Queue { get; } = new();
+
+    public string QueueSummary
+    {
+        get
+        {
+            var count = Queue.Count == 1 ? "1 item" : $"{Queue.Count} items";
+            var total = Queue.Sum(q => q.DurationMs);
+            return total > 0 ? $"{count} · {Format(total)}" : count;
+        }
+    }
+
+    private QueueItem NewQueueItem(string path)
+    {
+        var meta = _store.MetaFor(path);
+        var history = _store.FindHistory(path);
+        var title = meta?.Title
+            ?? (MediaScanner.IsStream(path) && history?.Title is { Length: > 0 } t ? t : MediaScanner.DisplayName(path));
+        var item = new QueueItem(path, title, meta?.DurationMs ?? history?.DurationMs ?? 0);
+        item.Play = () => PlayAt(item);
+        return item;
+    }
+
+    private void QueueChanged()
+    {
+        for (var i = 0; i < Queue.Count; i++) Queue[i].IsCurrent = !_detached && HasMedia && i == _index;
+        OnPropertyChanged(nameof(QueueSummary));
+        OnPropertyChanged(nameof(HasQueue));
+    }
+
+    public bool HasQueue => Queue.Count > 0;
+
     public void PlayList(IList<string> items, int index, string? label = null, Func<PanelPage>? source = null)
     {
         if (items.Count == 0) return;
         SaveProgress();
-        _queue = items.ToList();
-        _index = Math.Clamp(index, 0, _queue.Count - 1);
+        Queue.ReplaceAll(items.Select(NewQueueItem));
+        _index = Math.Clamp(index, 0, Queue.Count - 1);
         SourceLabel = label;
         SourcePage = source;
         PlayCurrent();
     }
 
+    /// <summary>Adds to the end of the queue. Starts playing when nothing is queued, or when the queue had already finished.</summary>
     public void Enqueue(IEnumerable<string> items)
     {
         var list = items.ToList();
         if (list.Count == 0) return;
-        if (!HasMedia) PlayList(list, 0, "Queue");
-        else _queue.AddRange(list);
+        if (!HasMedia && Queue.Count == 0)
+        {
+            PlayList(list, 0, "Queue");
+            return;
+        }
+        var finished = IsEnded && NextIndex(wrap: false) < 0;
+        var first = Queue.Count;
+        foreach (var path in list) Queue.Add(NewQueueItem(path));
+        QueueChanged();
+        ShowOsd(list.Count == 1 ? $"Added “{Queue[first].Title}” to the queue" : $"Added {list.Count} items to the queue",
+            "Q shows the queue", "Queue");
+        if (finished)
+        {
+            _index = first;
+            PlayCurrent();
+        }
     }
 
-    public void PlayNext(string item)
+    public void PlayNext(string path)
     {
-        if (!HasMedia) PlayList(new[] { item }, 0, "Queue");
-        else _queue.Insert(_index + 1, item);
+        if (!HasMedia && Queue.Count == 0)
+        {
+            PlayList(new[] { path }, 0, "Queue");
+            return;
+        }
+        var item = NewQueueItem(path);
+        var slot = _detached ? _index : _index + 1;
+        Queue.Insert(slot, item);
+        QueueChanged();
+        ShowOsd($"Playing next: {item.Title}", "Q shows the queue", "Queue");
+    }
+
+    /// <summary>Plays a queued item now, keeping the rest of the queue as it is.</summary>
+    public void PlayAt(QueueItem item)
+    {
+        var i = Queue.IndexOf(item);
+        if (i < 0) return;
+        SaveProgress();
+        _index = i;
+        PlayCurrent();
+    }
+
+    /// <summary>Moves a queued item right after the one playing.</summary>
+    public void PlayNext(QueueItem item)
+    {
+        var from = Queue.IndexOf(item);
+        if (from < 0 || (!_detached && from == _index)) return;
+        // Target index after the item has been taken out of the list.
+        var to = _detached ? (from < _index ? _index - 1 : _index) : (from < _index ? _index : _index + 1);
+        MoveInQueue(from, to);
+        ShowOsd($"Playing next: {item.Title}", null, "Queue");
+    }
+
+    /// <summary>Moves an item; <paramref name="to"/> is its index once moved (as <see cref="ObservableCollection{T}.Move"/>).</summary>
+    public void MoveInQueue(int from, int to)
+    {
+        if (from < 0 || from >= Queue.Count) return;
+        to = Math.Clamp(to, 0, Queue.Count - 1);
+        if (from == to) return;
+        Queue.Move(from, to);
+
+        if (!_detached && from == _index) _index = to;
+        else if (_index >= 0)
+        {
+            // The playing item (or, when detached, the gap it left) shifts as items cross it.
+            var g = _index;
+            if (from < g) g--;
+            if (_detached ? to < g : to <= g) g++;
+            _index = g;
+        }
+        QueueChanged();
+    }
+
+    /// <summary>Removes an item. Removing the one playing lets it finish; the queue then continues with the item after it.</summary>
+    public void RemoveFromQueue(QueueItem item)
+    {
+        var i = Queue.IndexOf(item);
+        if (i < 0) return;
+        Queue.RemoveAt(i);
+
+        if (i < _index) _index--;
+        else if (i == _index && !_detached)
+        {
+            if (HasMedia && !IsEnded) _detached = true;
+            else _index = Math.Min(i, Queue.Count - 1);
+        }
+        if (Queue.Count == 0 && !_detached) _index = -1;
+        QueueChanged();
+    }
+
+    /// <summary>Empties the queue except for the item playing.</summary>
+    public void ClearQueue()
+    {
+        if (Queue.Count == 0) return;
+        var keep = HasMedia && !_detached && _index >= 0 && _index < Queue.Count ? Queue[_index] : null;
+        Queue.ReplaceAll(keep is null ? Array.Empty<QueueItem>() : new[] { keep });
+        _index = keep is null ? (HasMedia ? 0 : -1) : 0;
+        if (keep is null && HasMedia) _detached = true;
+        QueueChanged();
+        ShowOsd("Queue cleared", null, "Queue");
     }
 
     /// <param name="startMs">Where to start; by default the saved resume point, if any.</param>
     private void PlayCurrent(long? startMs = null)
     {
-        var path = _queue[_index];
+        _detached = false;
+        _index = Math.Clamp(_index, 0, Queue.Count - 1);
+        var path = Queue[_index].Path;
         var kind = MediaScanner.KindOf(path);
         var meta = _store.MetaFor(path);
         var previous = _store.FindHistory(path);
@@ -300,6 +430,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         DurationText = "0:00";
         CurrentPath = path;
         HasMedia = true;
+        QueueChanged();
         Title = meta?.Title ?? MediaScanner.DisplayName(path);
         Subtitle = kind switch
         {
@@ -317,20 +448,32 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         NowPlayingChanged?.Invoke();
     }
 
+    /// <summary>The queued item playing, unless it was removed from the queue.</summary>
+    private QueueItem? CurrentItem => HasMedia && !_detached && _index >= 0 && _index < Queue.Count ? Queue[_index] : null;
+
+    /// <summary>The index the queue goes to next (or back to), or -1 at the end.</summary>
+    private int NextIndex(bool wrap, int direction = 1)
+    {
+        if (Queue.Count == 0) return -1;
+        // Detached: _index is already the item that followed the removed one.
+        var n = _detached && direction > 0 ? _index : _index + direction;
+        if (n >= Queue.Count) n = wrap ? 0 : -1;
+        else if (n < 0) n = wrap ? Queue.Count - 1 : -1;
+        return n;
+    }
+
     private bool TryAdvance(int direction, bool wrap)
     {
-        if (_queue.Count == 0) return false;
-        if (Shuffle && direction > 0 && _queue.Count > 1)
+        if (Queue.Count == 0) return false;
+        if (Shuffle && direction > 0 && Queue.Count > 1)
         {
             int next;
-            do next = _random.Next(_queue.Count); while (next == _index);
+            do next = _random.Next(Queue.Count); while (next == _index && !_detached);
             _index = next;
             return true;
         }
 
-        var n = _index + direction;
-        if (n >= _queue.Count) n = wrap ? 0 : -1;
-        else if (n < 0) n = wrap ? _queue.Count - 1 : -1;
+        var n = NextIndex(wrap, direction);
         if (n < 0) return false;
         _index = n;
         return true;
@@ -343,7 +486,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Position = 1;
         TimeText = DurationText;
 
-        if (Repeat == RepeatMode.One) PlayCurrent();
+        if (Repeat == RepeatMode.One && !_detached) PlayCurrent();
         else if (TryAdvance(1, Repeat == RepeatMode.All)) PlayCurrent();
         else
         {
@@ -360,7 +503,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     {
         if (!HasMedia)
         {
-            if (_queue.Count > 0) PlayCurrent();
+            if (Queue.Count > 0) PlayCurrent();
             else OpenRequested?.Invoke();
             return;
         }
@@ -381,7 +524,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Next()
     {
-        if (_queue.Count == 0) return;
+        if (Queue.Count == 0) return;
         SaveProgress();
         if (TryAdvance(1, Repeat != RepeatMode.Off))
         {
@@ -394,7 +537,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Previous()
     {
-        if (_queue.Count == 0) return;
+        if (Queue.Count == 0) return;
         if (Player.Time > 3000 && !IsEnded)
         {
             Player.Time = 0;
@@ -424,6 +567,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Position = 0;
         _messageTimer.Stop();
         Error = null;
+        QueueChanged();
         NowPlayingChanged?.Invoke();
         PlaybackStopped?.Invoke();
     }
@@ -439,7 +583,8 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         // Checked before IsSeekable: once a file has ended libVLC reports it as not seekable.
         if (IsEnded || Player.State is VLCState.Ended or VLCState.Stopped)
         {
-            // Seeking after the end restarts the item at the chosen point.
+            // Seeking after the end restarts the item at the chosen point (if it's still queued).
+            if (_detached) return;
             var length = _entry?.DurationMs ?? 0;
             PlayCurrent((long)(length * fraction));
             return;
@@ -521,6 +666,11 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             TimeText = Format(Math.Max(0, time));
         }
         DurationText = length > 0 ? Format(length) : MediaScanner.IsStream(CurrentPath ?? "") ? "Live" : "0:00";
+        if (length > 0 && CurrentItem is { DurationMs: 0 } current)
+        {
+            current.DurationMs = length;
+            OnPropertyChanged(nameof(QueueSummary));
+        }
 
         if (_entry != null && IsPlaying && time >= 0)
         {

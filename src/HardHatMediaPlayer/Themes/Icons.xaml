@@ -50,5 +50,6 @@
     <Geometry x:Key="I.Rewind">M21 18 V6 L13 12 Z M12 18 V6 L4 12 Z</Geometry>
     <Geometry x:Key="I.Keyboard">M4 5 H20 A2 2 0 0 1 22 7 V17 A2 2 0 0 1 20 19 H4 A2 2 0 0 1 2 17 V7 A2 2 0 0 1 4 5 Z M6 9 H6.01 M10 9 H10.01 M14 9 H14.01 M18 9 H18.01 M6 13 H6.01 M18 13 H18.01 M10 13 H14 M7 16 H17</Geometry>
     <Geometry x:Key="I.Repeat">M17 1 L21 5 L17 9 M3 11 V9 A4 4 0 0 1 7 5 H21 M7 23 L3 19 L7 15 M21 13 V15 A4 4 0 0 1 17 19 H3</Geometry>
+    <Geometry x:Key="I.Queue">M16 6 H3 M12 12 H3 M12 18 H3 M21 15.5 V6 M18.5 18 A2.5 2.5 0 1 0 18.5 13 A2.5 2.5 0 0 0 18.5 18 Z</Geometry>
     <Geometry x:Key="I.Shuffle">M16 3 H21 V8 M4 20 L21 3 M21 16 V21 H16 M15 15 L21 21 M4 4 L9 9</Geometry>
 </ResourceDictionary>

@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         Background="{StaticResource ChromeBrush}" Foreground="{StaticResource TextBrush}"
         FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True"
-        AllowDrop="True" Drop="OnDrop" PreviewKeyDown="OnKeyDown">
+        AllowDrop="True" Drop="OnDrop" DragOver="OnWindowDragOver" PreviewKeyDown="OnKeyDown">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
@@ -74,6 +74,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnRowPress"/>
+            <EventSetter Event="PreviewMouseMove" Handler="OnRowMove"/>
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnRowClick"/>
             <EventSetter Event="MouseRightButtonUp" Handler="OnRowRightClick"/>
             <Setter Property="Template">
@@ -97,6 +98,61 @@
                                 <Setter TargetName="Bd" Property="Background" Value="Transparent"/>
                                 <Setter Property="Focusable" Value="False"/>
                             </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Queue rows. Named rather than implicit: the queue lives in the video overlay window, outside this window's resources. -->
+        <DataTemplate x:Key="QueueRowTemplate" DataType="{x:Type vm:QueueItem}">
+            <Grid Height="34" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="28"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ctl:Icon x:Name="Ico" Data="{Binding Icon}" Width="16" Height="16" HorizontalAlignment="Left" Foreground="{StaticResource MutedBrush}" StrokeThickness="1.8"/>
+                <ctl:Icon x:Name="NowIco" Data="{StaticResource I.Play}" Filled="True" Width="13" Height="13" Margin="1,0,0,0" HorizontalAlignment="Left"
+                          Foreground="{StaticResource AccentBrush}" Visibility="Collapsed"/>
+                <TextBlock x:Name="Lbl" Grid.Column="1" Text="{Binding Title}" Foreground="{StaticResource Text2Brush}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2" Text="{Binding Duration}" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="10,0,2,0" VerticalAlignment="Center"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="Lbl" Property="Foreground" Value="{StaticResource TextBrush}"/>
+                    <Setter TargetName="Ico" Property="Foreground" Value="{StaticResource Text2Brush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter TargetName="Lbl" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                    <Setter TargetName="Ico" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="NowIco" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="QueueRowContainer" TargetType="ListBoxItem">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnQueueRowPress"/>
+            <EventSetter Event="PreviewMouseMove" Handler="OnQueueRowMove"/>
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnQueueRowClick"/>
+            <EventSetter Event="MouseRightButtonUp" Handler="OnQueueRowRightClick"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="8,0">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1F1A14"/>
+                            </DataTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1D1D1D"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -275,7 +331,11 @@
             <vlc:VideoView x:Name="Video" Grid.Column="2" Background="Black">
                 <Grid x:Name="Overlay" Background="#01000000" AllowDrop="True" Drop="OnDrop"
                       TextElement.Foreground="{StaticResource TextBrush}" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="13"
-                      MouseMove="OnOverlayMouseMove" MouseLeftButtonDown="OnOverlayClick" MouseWheel="OnOverlayWheel">
+                      MouseMove="OnOverlayMouseMove" MouseLeftButtonDown="OnOverlayClick" MouseWheel="OnOverlayWheel" SizeChanged="OnOverlaySizeChanged">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
                     <!-- Idle state and audio "now playing" -->
                     <Grid Background="{StaticResource ContentBrush}" Visibility="{Binding Player.ShowBackdrop, Converter={StaticResource Vis}}">
@@ -345,7 +405,7 @@
                     </Border>
 
                     <!-- Keyboard shortcuts (F1 or ?) -->
-                    <Grid x:Name="ShortcutsLayer" Background="#B0000000" Visibility="Collapsed" MouseLeftButtonDown="OnShortcutsBackdrop">
+                    <Grid x:Name="ShortcutsLayer" Grid.ColumnSpan="2" Background="#B0000000" Visibility="Collapsed" MouseLeftButtonDown="OnShortcutsBackdrop">
                         <Border Background="{StaticResource PopupBrush}" BorderBrush="{StaticResource PopupBorderBrush}" BorderThickness="1" CornerRadius="14"
                                 Padding="24,18" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760" Margin="24">
                             <DockPanel>
@@ -456,11 +516,67 @@
                                             Stylus.IsPressAndHoldEnabled="False" AutomationProperties.Name="Volume"
                                             PreviewMouseLeftButtonDown="OnScrubStart" PreviewMouseMove="OnScrubMove" PreviewMouseLeftButtonUp="OnScrubEnd" LostMouseCapture="OnScrubLost"
                                             ToolTip="{Binding Player.Volume}" ToolTipService.Placement="Top"/>
+                                    <ToggleButton x:Name="QueueButton" Style="{StaticResource AccentToggle}" Width="32" Height="32" Padding="7" Margin="0,0,2,0"
+                                                  IsChecked="{Binding IsQueueOpen}" ToolTip="Queue (Q)">
+                                        <ctl:Icon Data="{StaticResource I.Queue}" StrokeThickness="1.8"/>
+                                    </ToggleButton>
                                     <Button x:Name="FullscreenButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding ToggleFullscreenCommand}" ToolTip="Fullscreen (F)">
                                         <ctl:Icon x:Name="FullscreenIcon" Data="{StaticResource I.Fullscreen}" StrokeThickness="1.8"/>
                                     </Button>
                                 </StackPanel>
                             </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- Play queue (Q): what plays next, separate from saved playlists. Docked over the right of the video. -->
+                    <Border x:Name="QueuePanel" Grid.Column="1" Width="320" Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource DividerBrush}" BorderThickness="1,0,0,0" AutomationProperties.Name="Queue"
+                            Visibility="{Binding IsQueueOpen, Converter={StaticResource Vis}}" AllowDrop="True"
+                            DragEnter="OnQueueDragOver" DragOver="OnQueueDragOver" DragLeave="OnQueueDragLeave" Drop="OnQueueDrop">
+                        <Grid>
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Top" Height="44" Margin="8,4,8,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0">
+                                        <ctl:Icon Data="{StaticResource I.Queue}" Foreground="{StaticResource AccentBrush}" StrokeThickness="1.8"/>
+                                        <TextBlock Text="Queue" FontSize="14.5" Margin="9,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Style="{StaticResource IconButton}" Command="{Binding ToggleQueueCommand}" ToolTip="Close queue (Q)">
+                                        <ctl:Icon Data="{StaticResource I.X}" StrokeThickness="1.8"/>
+                                    </Button>
+                                </Grid>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding Player.QueueSummary}" Foreground="{StaticResource MutedBrush}"
+                                           FontSize="12" Margin="16,0,8,6" AutomationProperties.AutomationId="QueueSummary"/>
+                                <Border DockPanel.Dock="Top" Height="1" Background="{StaticResource DividerBrush}" Margin="14,2,12,4"/>
+
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,12"
+                                            Visibility="{Binding Player.HasQueue, Converter={StaticResource Vis}}">
+                                    <Button Style="{StaticResource PillButton}" Command="{Binding SaveQueueAsPlaylistCommand}" Content="Save as playlist"/>
+                                    <Button Style="{StaticResource PillButton}" Command="{Binding ClearQueueCommand}" Content="Clear queue"/>
+                                </StackPanel>
+
+                                <Grid>
+                                    <ctl:RowList x:Name="QueueList" ItemsSource="{Binding Player.Queue}" ItemTemplate="{StaticResource QueueRowTemplate}"
+                                                 ItemContainerStyle="{StaticResource QueueRowContainer}" AutomationProperties.Name="Queue items"
+                                                 Background="Transparent" BorderThickness="0" Padding="6,0,6,8" Foreground="{StaticResource TextBrush}"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"/>
+                                    <TextBlock Text="The queue is empty.&#x0a;Drag files or library items here, or right-click anything and choose &#x201c;Add to queue&#x201d;."
+                                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="24,28,24,0"
+                                               VerticalAlignment="Top" IsHitTestVisible="False"
+                                               Visibility="{Binding Player.HasQueue, Converter={StaticResource Vis}, ConverterParameter=Invert}"/>
+                                    <!-- Where a dragged queue row will land -->
+                                    <Canvas IsHitTestVisible="False" ClipToBounds="True">
+                                        <Border x:Name="QueueDropLine" Height="2" CornerRadius="1" Background="{StaticResource AccentBrush}" Visibility="Collapsed"/>
+                                    </Canvas>
+                                </Grid>
+                            </DockPanel>
+                            <!-- Shown while files or library items are dragged over the queue -->
+                            <Border x:Name="QueueDropHint" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2" Background="#14FF8800"
+                                    IsHitTestVisible="False" Visibility="Collapsed"/>
                         </Grid>
                     </Border>
                 </Grid>

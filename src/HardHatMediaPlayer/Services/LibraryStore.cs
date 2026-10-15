@@ -58,6 +58,7 @@ public sealed class LibraryData
     public Dictionary<string, AudioMeta> Meta { get; set; } = new();
     public int Volume { get; set; } = 80;
     public bool PanelOpen { get; set; } = true;
+    public bool QueueOpen { get; set; }
     public double PanelWidth { get; set; } = 280;
     public double WindowLeft { get; set; }
     public double WindowTop { get; set; }

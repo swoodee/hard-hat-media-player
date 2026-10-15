@@ -50,6 +50,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isPanelOpen;
     [ObservableProperty] private bool _isPanelWide;
     [ObservableProperty] private bool _isFullscreen;
+    [ObservableProperty] private bool _isQueueOpen;
 
     public event Action? FullscreenToggled;
     public event Action? ShortcutsRequested;
@@ -64,6 +65,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Subtitles = new SubtitleService(Store.Data.Subtitles);
         Player.MediaStarted += path => _ = AutoSubtitlesAsync(path);
         _isPanelOpen = Store.Data.PanelOpen;
+        _isQueueOpen = Store.Data.QueueOpen;
 
         Rail.Add(new RailItem { Key = "home", Label = "Home", Icon = Ico("Home"), Page = HomePage });
         Rail.Add(new RailItem { Key = "videos", Label = "Videos", Icon = Ico("Video"), Page = VideosPage });
@@ -99,6 +101,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _metaRefresh;
 
     partial void OnIsPanelOpenChanged(bool value) => Store.Data.PanelOpen = value;
+    partial void OnIsQueueOpenChanged(bool value) => Store.Data.QueueOpen = value;
 
     private void RefreshIf(params string[] railKeys)
     {
@@ -124,6 +127,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand] private void TogglePanel() => IsPanelOpen = !IsPanelOpen;
     [RelayCommand] private void TogglePanelWide() => IsPanelWide = !IsPanelWide;
+    [RelayCommand] private void ToggleQueue() => IsQueueOpen = !IsQueueOpen;
     [RelayCommand] private void ToggleFullscreen() => FullscreenToggled?.Invoke();
 
     [RelayCommand]
@@ -182,11 +186,55 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         else Player.PlayList(files, 0, "Opened files");
     }
 
+    /// <summary>Adds files or folders to the end of the queue (the player shows what was added).</summary>
     public void Enqueue(IEnumerable<string> paths)
     {
         var files = MediaScanner.Expand(paths);
-        Player.Enqueue(files);
-        if (files.Count > 0) Player.ShowMessage(files.Count == 1 ? "Added to queue." : $"Added {files.Count} items to the queue.");
+        if (files.Count == 0) Player.ShowMessage("Nothing playable there.");
+        else Player.Enqueue(files);
+    }
+
+    [RelayCommand]
+    private void ClearQueue() => Player.ClearQueue();
+
+    [RelayCommand]
+    private void SaveQueueAsPlaylist()
+    {
+        if (Player.Queue.Count == 0)
+        {
+            Player.ShowOsd("The queue is empty", "Drag media onto the queue first", "Queue");
+            return;
+        }
+        if (CreatePlaylist(Player.Queue.Select(q => q.Path).ToList()) is { } p)
+            Player.ShowOsd($"Saved playlist “{p.Name}”", $"{p.Items.Count} items · find it under Playlists", "Playlist");
+    }
+
+    /// <summary>Right-click menu for an item in the queue.</summary>
+    public IReadOnlyList<MenuAction> QueueItemMenu(QueueItem item)
+    {
+        var i = Player.Queue.IndexOf(item);
+        var last = Player.Queue.Count - 1;
+        var menu = new List<MenuAction>
+        {
+            new("Play", () => Player.PlayAt(item)),
+            new("Play next", () => Player.PlayNext(item)),
+            MenuAction.Separator,
+        };
+        if (i > 0)
+        {
+            menu.Add(new MenuAction("Move to top", () => Player.MoveInQueue(Player.Queue.IndexOf(item), 0)));
+            menu.Add(new MenuAction("Move up", () => Player.MoveInQueue(Player.Queue.IndexOf(item), Player.Queue.IndexOf(item) - 1)));
+        }
+        if (i < last)
+        {
+            menu.Add(new MenuAction("Move down", () => Player.MoveInQueue(Player.Queue.IndexOf(item), Player.Queue.IndexOf(item) + 1)));
+            menu.Add(new MenuAction("Move to bottom", () => Player.MoveInQueue(Player.Queue.IndexOf(item), Player.Queue.Count - 1)));
+        }
+        menu.Add(new MenuAction("Remove from queue", () => Player.RemoveFromQueue(item)));
+        menu.Add(MenuAction.Separator);
+        menu.Add(AddToPlaylistMenu(() => new[] { item.Path }));
+        if (item.Kind != MediaKind.Stream) menu.Add(new MenuAction("Show in Explorer", () => ShowInExplorer(item.Path)));
+        return menu;
     }
 
     private static string FolderTitle(string dir)
@@ -205,6 +253,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         new("Playback", Children: PlaybackMenu()),
         MenuAction.Separator,
         new("Show library panel", TogglePanel, IsChecked: IsPanelOpen, Gesture: "Ctrl+B"),
+        new("Show queue", ToggleQueue, IsChecked: IsQueueOpen, Gesture: "Q"),
         new("Fullscreen", ToggleFullscreen, Gesture: "F11"),
         MenuAction.Separator,
         new("Keyboard shortcuts", () => ShortcutsRequested?.Invoke(), Gesture: "F1"),

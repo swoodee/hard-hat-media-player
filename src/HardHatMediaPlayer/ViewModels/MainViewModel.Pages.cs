@@ -140,6 +140,7 @@ public sealed partial class MainViewModel
         {
             Label = name,
             Icon = Ico("Folder"),
+            DragPaths = () => MediaScanner.Expand(new[] { dir }),
             Invoke = () =>
             {
                 Store.VisitFolder(dir);
@@ -236,6 +237,7 @@ public sealed partial class MainViewModel
                     Thumbnail = group == MusicGroup.Album ? songs.Select(f => Store.MetaFor(f)?.Artwork).FirstOrDefault(a => a != null) : null,
                     Detail = artist != null ? $"{artist} · {songs.Count}" : songs.Count == 1 ? "1 song" : $"{songs.Count} songs",
                     Invoke = () => Panel.Navigate(() => GroupPage(group, name, unknown)),
+                    DragPaths = () => SortedSongs(GroupFiles(group, name, unknown), true),
                     Menu = () => CollectionMenu(() => SortedSongs(GroupFiles(group, name, unknown), true), name, () => GroupPage(group, name, unknown)).ToList(),
                 };
             })
@@ -290,6 +292,7 @@ public sealed partial class MainViewModel
         Icon = Ico("Playlist"),
         Detail = p.Items.Count == 1 ? "1 item" : $"{p.Items.Count} items",
         Invoke = () => Panel.Navigate(() => PlaylistPage(p.Id)),
+        DragPaths = () => p.Items.ToList(),
         Menu = () => PlaylistMenu(p),
     };
 
@@ -459,6 +462,7 @@ public sealed partial class MainViewModel
             Thumbnail = thumb != null && File.Exists(thumb) ? thumb : null,
             Detail = detail ?? (duration > 0 ? PlayerViewModel.Format(duration) : null),
             MediaPath = path,
+            DragPaths = () => new[] { path },
             Invoke = play,
             Menu = () =>
             {

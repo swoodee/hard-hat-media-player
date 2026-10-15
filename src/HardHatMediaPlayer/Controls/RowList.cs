@@ -29,8 +29,11 @@ public sealed class RowList : ListBox
         {
             ItemRow row => row.Label,
             SectionRow section => section.Title,
+            QueueItem queued => queued.Title,
             _ => base.GetNameCore(),
         };
+
+        protected override string GetItemStatusCore() => Item is QueueItem { IsCurrent: true } ? "Now playing" : base.GetItemStatusCore();
 
         public override object GetPattern(PatternInterface pattern) =>
             pattern == PatternInterface.Invoke ? this : base.GetPattern(pattern);
@@ -38,7 +41,9 @@ public sealed class RowList : ListBox
         public void Invoke()
         {
             // Deferred like WPF's own button peers, so a row that opens a dialog doesn't block the automation client.
-            if (Item is PanelRow row) System.Windows.Application.Current.Dispatcher.BeginInvoke(row.Activate);
+            var dispatcher = System.Windows.Application.Current.Dispatcher;
+            if (Item is PanelRow row) dispatcher.BeginInvoke(row.Activate);
+            else if (Item is QueueItem { Play: { } play }) dispatcher.BeginInvoke(play);
         }
     }
 }

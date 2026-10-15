@@ -48,6 +48,9 @@ public sealed class ItemRow : PanelRow
     public Func<IReadOnlyList<MenuAction>>? Menu { get; init; }
     public string? MediaPath { get; init; }
 
+    /// <summary>The media this row stands for when it is dragged (onto the queue or the video).</summary>
+    public Func<IEnumerable<string>>? DragPaths { get; init; }
+
     public bool HasThumbnail => Thumbnail != null;
 
     public override void Activate() => Invoke?.Invoke();

@@ -94,6 +94,7 @@ public partial class MainWindow : Window, IUiServices
     private ContextMenu? _openMenu;
     private Slider? _scrubbing;
     private object? _pressedRow;
+    private Point _pressPoint;
 
     private ScrollViewer? ListScroller =>
         VisualTreeHelper.GetChildrenCount(PanelList) > 0 && VisualTreeHelper.GetChild(PanelList, 0) is Border { Child: ScrollViewer sv } ? sv : null;
@@ -312,7 +313,7 @@ public partial class MainWindow : Window, IUiServices
     {
         _hideControls.Stop();
         var p = _vm.Player;
-        if (!p.HasVideo || !p.IsPlaying || ControlsBar.IsMouseOver || _openMenu?.IsOpen == true || _scrubbing != null)
+        if (!p.HasVideo || !p.IsPlaying || ControlsBar.IsMouseOver || QueuePanel.IsMouseOver || _openMenu?.IsOpen == true || _scrubbing != null)
         {
             if (p.HasVideo && p.IsPlaying) _hideControls.Start(); // check again later
             return;
@@ -324,7 +325,7 @@ public partial class MainWindow : Window, IUiServices
 
     private void OnOverlayClick(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is DependencyObject d && IsInside(d, ControlsBar)) return;
+        if (e.OriginalSource is DependencyObject d && (IsInside(d, ControlsBar) || IsInside(d, QueuePanel))) return;
         if (!_vm.Player.HasVideo) return;
 
         if (e.ClickCount == 2)
@@ -340,6 +341,7 @@ public partial class MainWindow : Window, IUiServices
 
     private void OnOverlayWheel(object sender, MouseWheelEventArgs e)
     {
+        if (e.OriginalSource is DependencyObject d && IsInside(d, QueuePanel)) return; // scrolling the queue
         _vm.Player.ChangeVolume(e.Delta > 0 ? 5 : -5);
         ShowControls();
     }
@@ -454,8 +456,25 @@ public partial class MainWindow : Window, IUiServices
 
     // ---- Library list ----
 
-    private void OnRowPress(object sender, MouseButtonEventArgs e) =>
+    private void OnRowPress(object sender, MouseButtonEventArgs e)
+    {
         _pressedRow = (sender as ListBoxItem)?.DataContext;
+        _pressPoint = e.GetPosition((IInputElement)sender);
+    }
+
+    /// <summary>Dragging a library row carries its media, to drop on the queue (append) or the video (play).</summary>
+    private void OnRowMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || sender is not ListBoxItem { DataContext: ItemRow { DragPaths: { } paths } row } item
+            || !ReferenceEquals(row, _pressedRow) || !IsDragGesture(e.GetPosition(item))) return;
+        _pressedRow = null; // a drag isn't a click
+        var files = paths().ToArray();
+        if (files.Length > 0) DragDrop.DoDragDrop(item, new DataObject(PathsFormat, files), DragDropEffects.Copy);
+    }
+
+    private bool IsDragGesture(Point p) =>
+        Math.Abs(p.X - _pressPoint.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+        Math.Abs(p.Y - _pressPoint.Y) >= SystemParameters.MinimumVerticalDragDistance;
 
     private void OnRowClick(object sender, MouseButtonEventArgs e)
     {
@@ -551,6 +570,7 @@ public partial class MainWindow : Window, IUiServices
                 case Key.OemPlus when !shift: p.NormalSpeed(); break;      // "="
                 case Key.V: p.CycleSubtitles(); break;
                 case Key.B: p.CycleAudioTracks(); break;
+                case Key.Q: _vm.IsQueueOpen = !_vm.IsQueueOpen; break;
                 default: handled = false; break;
             }
         }
@@ -560,9 +580,29 @@ public partial class MainWindow : Window, IUiServices
 
     // ---- Drag and drop ----
 
+    /// <summary>Library rows dragged inside the app; holds their paths (files, folders or stream URLs).</summary>
+    private const string PathsFormat = "HardHatMediaPlayer.Paths";
+
+    /// <summary>A queue row being reordered; holds its index in the queue.</summary>
+    private const string QueueIndexFormat = "HardHatMediaPlayer.QueueIndex";
+
+    /// <summary>Library rows only drop onto the video or the queue; dropping one back on the library does nothing.</summary>
+    private void OnWindowDragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(PathsFormat)) return;
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
     private void OnDrop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        if (e.Data.GetData(PathsFormat) is string[] dragged)
+        {
+            if (sender != Overlay) return;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) _vm.Enqueue(dragged);
+            else _vm.Play(dragged);
+        }
+        else if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
         {
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) _vm.Enqueue(files);
             else _vm.Play(files);
@@ -572,6 +612,116 @@ public partial class MainWindow : Window, IUiServices
             _vm.Play(new[] { uri.ToString() });
         }
         e.Handled = true;
+    }
+
+    // ---- Queue panel ----
+
+    private QueueItem? _pressedQueueItem;
+
+    private void OnOverlaySizeChanged(object sender, SizeChangedEventArgs e) =>
+        QueuePanel.Width = Math.Clamp(e.NewSize.Width * 0.4, 220, 340);
+
+    private void OnQueueRowPress(object sender, MouseButtonEventArgs e)
+    {
+        _pressedQueueItem = (sender as ListBoxItem)?.DataContext as QueueItem;
+        _pressPoint = e.GetPosition((IInputElement)sender);
+    }
+
+    private void OnQueueRowMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || sender is not ListBoxItem { DataContext: QueueItem queued } item
+            || !ReferenceEquals(queued, _pressedQueueItem) || !IsDragGesture(e.GetPosition(item))) return;
+        _pressedQueueItem = null;
+        var index = _vm.Player.Queue.IndexOf(queued);
+        if (index < 0) return;
+        DragDrop.DoDragDrop(item, new DataObject(QueueIndexFormat, index), DragDropEffects.Move);
+        HideQueueDropHints();
+    }
+
+    private void OnQueueRowClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListBoxItem { DataContext: QueueItem queued } || !ReferenceEquals(queued, _pressedQueueItem)) return;
+        _pressedQueueItem = null;
+        Dispatcher.BeginInvoke(() => _vm.Player.PlayAt(queued));
+    }
+
+    private void OnQueueRowRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListBoxItem { DataContext: QueueItem queued } item) return;
+        _hideControls.Stop();
+        _openMenu = MenuBuilder.Show(_vm.QueueItemMenu(queued), item, PlacementMode.MousePoint);
+        _openMenu.Closed += (_, _) => ShowControls();
+        e.Handled = true;
+    }
+
+    private void OnQueueDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(QueueIndexFormat))
+        {
+            e.Effects = DragDropEffects.Move;
+            var (_, y) = QueueDropSlot(e);
+            QueueDropLine.Width = Math.Max(0, QueueList.ActualWidth - 12);
+            Canvas.SetLeft(QueueDropLine, 6);
+            Canvas.SetTop(QueueDropLine, Math.Max(0, y - 1));
+            QueueDropLine.Visibility = Visibility.Visible;
+            ScrollQueueNearEdge(e.GetPosition(QueueList).Y);
+        }
+        else if (e.Data.GetDataPresent(PathsFormat) || e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.UnicodeText))
+        {
+            e.Effects = DragDropEffects.Copy;
+            QueueDropHint.Visibility = Visibility.Visible;
+        }
+        else e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnQueueDragLeave(object sender, DragEventArgs e) => HideQueueDropHints();
+
+    private void HideQueueDropHints()
+    {
+        QueueDropLine.Visibility = Visibility.Collapsed;
+        QueueDropHint.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Reorders a dragged queue row, or appends whatever else was dropped on the queue.</summary>
+    private void OnQueueDrop(object sender, DragEventArgs e)
+    {
+        HideQueueDropHints();
+        e.Handled = true;
+        if (e.Data.GetData(QueueIndexFormat) is int from)
+        {
+            var (slot, _) = QueueDropSlot(e);
+            _vm.Player.MoveInQueue(from, slot > from ? slot - 1 : slot);
+        }
+        else if (e.Data.GetData(PathsFormat) is string[] dragged) _vm.Enqueue(dragged);
+        else if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0) _vm.Enqueue(files);
+        else if (e.Data.GetData(DataFormats.UnicodeText) is string text && Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) && !uri.IsFile)
+            _vm.Enqueue(new[] { uri.ToString() });
+    }
+
+    /// <summary>The queue index a row dropped at the pointer would be inserted before, and the y of that gap in the list.</summary>
+    private (int Slot, double Y) QueueDropSlot(DragEventArgs e)
+    {
+        var y = e.GetPosition(QueueList).Y;
+        var generator = QueueList.ItemContainerGenerator;
+        int last = -1;
+        double bottom = 0;
+        for (var i = 0; i < QueueList.Items.Count; i++)
+        {
+            if (generator.ContainerFromIndex(i) is not ListBoxItem row || !row.IsVisible) continue;
+            var top = row.TranslatePoint(new Point(0, 0), QueueList).Y;
+            if (y < top + row.ActualHeight / 2) return (i, top);
+            last = i;
+            bottom = top + row.ActualHeight;
+        }
+        return (last + 1, bottom);
+    }
+
+    private void ScrollQueueNearEdge(double y)
+    {
+        if (VisualTreeHelper.GetChildrenCount(QueueList) == 0 || VisualTreeHelper.GetChild(QueueList, 0) is not Border { Child: ScrollViewer sv }) return;
+        if (y < 28) sv.ScrollToVerticalOffset(sv.VerticalOffset - 12);
+        else if (y > QueueList.ActualHeight - 28) sv.ScrollToVerticalOffset(sv.VerticalOffset + 12);
     }
 
     // ---- Caption buttons ----
@@ -649,6 +799,7 @@ public partial class MainWindow : Window, IUiServices
         new("Ctrl + Shift + O", "Open folder"),
         new("Ctrl + N", "Open network stream"),
         new("Ctrl + B", "Show / hide library"),
+        new("Q", "Show / hide the queue"),
         new("Ctrl + F", "Search the library page"),
         new("Alt + \u2190  \u2192", "Library back / forward"),
         new("Backspace", "Library back"),
