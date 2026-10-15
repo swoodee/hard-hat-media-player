@@ -64,6 +64,7 @@ public sealed class LibraryData
     public double WindowWidth { get; set; }
     public double WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
+    public SubtitleSettings Subtitles { get; set; } = new();
 }
 
 /// <summary>Library, playlists and history, persisted as JSON in %APPDATA%\VlcRedesign.</summary>

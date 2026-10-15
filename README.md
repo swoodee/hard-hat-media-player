@@ -28,6 +28,22 @@ You can pass files or folders on the command line, or drag them onto the window.
   - *History*: everything played, with clear and remove.
 - **Player**: auto-hiding floating controls with seek bar, shuffle, previous / play / next, repeat (off/all/one), subtitles and audio tracks, external subtitle files, playback speed, volume, fullscreen. The idle screen shows the prototype's pixel cat. Audio shows album art.
 
+### Subtitles from OpenSubtitles (VLsub-style)
+
+Open **… → Find subtitles online…**, or the subtitles button in the player → **Subtitles → Find subtitles online…**.
+You can search **by hash** (subtitles made for that exact file) or **by name**, pick a result, and choose **Download and use**.
+The file is saved next to the video as `video.lang.srt`, so VLC loads it automatically next time.
+
+With **Download automatically** on, a video that starts without any subtitles gets the best exact (hash) match in your languages.
+Name-only matches are never applied automatically.
+
+This uses the [OpenSubtitles.com REST API](https://opensubtitles.stoplight.io/docs/opensubtitles-api). The classic VLsub
+used the old opensubtitles.org XML-RPC API, which has been shut down for third-party apps. Setup:
+
+1. Create a free account at opensubtitles.com and get an API key at <https://www.opensubtitles.com/consumers>.
+2. In the Find subtitles window, choose **Account…** and paste the key. Username and password are optional and raise
+   the daily download limit. The password is stored encrypted for your Windows account (DPAPI).
+
 ### Shortcuts
 
 | Key | Action |

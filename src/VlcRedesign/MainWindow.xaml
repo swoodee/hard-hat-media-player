@@ -355,7 +355,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding Player.TimeText}" FontSize="12" Foreground="{StaticResource Text2Brush}" VerticalAlignment="Center"/>
                                 <Slider x:Name="SeekBar" Grid.Column="1" Style="{StaticResource MediaSlider}" Minimum="0" Maximum="1" Margin="8,0"
-                                        Value="{Binding Player.Position, Mode=TwoWay}"
+                                        Stylus.IsPressAndHoldEnabled="False" AutomationProperties.Name="Seek"
                                         PreviewMouseLeftButtonDown="OnScrubStart" PreviewMouseMove="OnScrubMove" PreviewMouseLeftButtonUp="OnScrubEnd"
                                         LostMouseCapture="OnScrubLost" ValueChanged="OnSeekMoved"/>
                                 <TextBlock Grid.Column="2" Text="{Binding Player.DurationText}" FontSize="12" Foreground="{StaticResource Text2Brush}"
@@ -404,6 +404,7 @@
                                     </Button>
                                     <Slider x:Name="VolumeBar" Style="{StaticResource MediaSlider}" Width="90" Minimum="0" Maximum="125" Margin="2,0,8,0" VerticalAlignment="Center"
                                             IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Player.Volume, Mode=TwoWay}"
+                                            Stylus.IsPressAndHoldEnabled="False" AutomationProperties.Name="Volume"
                                             PreviewMouseLeftButtonDown="OnScrubStart" PreviewMouseMove="OnScrubMove" PreviewMouseLeftButtonUp="OnScrubEnd" LostMouseCapture="OnScrubLost"
                                             ToolTip="{Binding Player.Volume}" ToolTipService.Placement="Top"/>
                                     <Button x:Name="FullscreenButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding ToggleFullscreenCommand}" ToolTip="Fullscreen (F)">

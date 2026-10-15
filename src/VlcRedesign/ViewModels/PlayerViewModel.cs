@@ -26,6 +26,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     private HistoryEntry? _entry;
     private DateTime _lastSave;
     private DateTime _lastSnapshot;
+    private DateTime _seekSettles;
     private bool _disposed;
 
     public LibVLC LibVLC { get; }
@@ -66,6 +67,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public event Action? ThumbnailUpdated;
     public event Action? OpenRequested;
     public event Action? PlaybackStopped;
+
+    /// <summary>Raised once per item, when it actually starts playing.</summary>
+    public event Action<string>? MediaStarted;
+    private bool _startedRaised;
 
     public PlayerViewModel(LibraryStore store, Dispatcher ui)
     {
@@ -128,6 +133,11 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.Mute = IsMuted;
         if (Math.Abs(Player.Rate - Rate) > 0.001f) Player.SetRate(Rate);
         ReadPlayingMetadata();
+        if (!_startedRaised && CurrentPath != null)
+        {
+            _startedRaised = true;
+            MediaStarted?.Invoke(CurrentPath);
+        }
     }
 
     /// <summary>Files opened outside the music library and streams only get their tags once libVLC has opened them.</summary>
@@ -222,6 +232,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         _messageTimer.Stop();
         Error = null;
         IsEnded = false;
+        _startedRaised = false;
         Kind = kind;
         HasVideo = false;
         Position = 0;
@@ -348,8 +359,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 
     public void Seek(double fraction)
     {
-        if (!HasMedia || !Player.IsSeekable) return;
+        if (!HasMedia) return;
         fraction = Math.Clamp(fraction, 0, 1);
+        // Checked before IsSeekable: once a file has ended libVLC reports it as not seekable.
         if (IsEnded || Player.State is VLCState.Ended or VLCState.Stopped)
         {
             // Seeking after the end restarts the item at the chosen point.
@@ -357,15 +369,27 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             PlayCurrent((long)(length * fraction));
             return;
         }
+        if (!Player.IsSeekable)
+        {
+            OnPropertyChanged(nameof(Position)); // live streams: put the bar back where playback really is
+            return;
+        }
         Player.Position = (float)fraction;
         Position = fraction;
+        TimeText = FormatAt(fraction);
+        // libVLC seeks asynchronously; don't let the next ticks pull the bar back to the old time.
+        _seekSettles = DateTime.Now.AddMilliseconds(700);
     }
 
     public void SeekBy(long ms)
     {
         if (!HasMedia || !Player.IsSeekable) return;
         var length = Player.Length;
-        Player.Time = Math.Clamp(Player.Time + ms, 0, length > 0 ? length - 500 : long.MaxValue);
+        var target = Math.Clamp(Player.Time + ms, 0, length > 0 ? length - 500 : long.MaxValue);
+        Player.Time = target;
+        if (length > 0) Position = target / (double)length;
+        TimeText = Format(target);
+        _seekSettles = DateTime.Now.AddMilliseconds(700);
     }
 
     public void ChangeVolume(int delta) => Volume = Math.Clamp(Volume + delta, 0, 125);
@@ -401,7 +425,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         var length = Player.Length;
         var time = Player.Time;
 
-        if (!IsSeeking)
+        if (!IsSeeking && DateTime.Now >= _seekSettles)
         {
             if (length > 0) Position = Math.Clamp(time / (double)length, 0, 1);
             TimeText = Format(Math.Max(0, time));

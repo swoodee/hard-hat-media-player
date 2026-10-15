@@ -156,17 +156,58 @@ public partial class MainWindow : Window, IUiServices
         {
             _stateBeforeFullscreen = WindowState;
             _vm.IsFullscreen = true;
+            // No resize frame: the shell only treats frameless monitor-sized windows as fullscreen.
+            ResizeMode = ResizeMode.NoResize;
             // Re-maximizing makes Windows ask for the max size again, which now covers the whole monitor.
             if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal;
             WindowState = WindowState.Maximized;
+            MarkFullscreen(true);
+            Activate();
         }
         else
         {
             _vm.IsFullscreen = false;
+            MarkFullscreen(false);
+            ResizeMode = ResizeMode.CanResize;
             WindowState = WindowState.Normal;
             if (_stateBeforeFullscreen == WindowState.Maximized) WindowState = WindowState.Maximized;
         }
         ShowControls();
+    }
+
+    /// <summary>Tells the taskbar to get out of the way (or come back) for this window and the video overlay.</summary>
+    private void MarkFullscreen(bool on)
+    {
+        try
+        {
+            _taskbar ??= CreateTaskbarList();
+            if (_taskbar is null) return;
+            _taskbar.MarkFullscreenWindow(new WindowInteropHelper(this).Handle, on);
+            if (GetWindow(Overlay) is { } overlay && overlay != this)
+                _taskbar.MarkFullscreenWindow(new WindowInteropHelper(overlay).Handle, on);
+        }
+        catch (COMException) { }
+    }
+
+    private ITaskbarList2? _taskbar;
+
+    private static ITaskbarList2? CreateTaskbarList()
+    {
+        var type = Type.GetTypeFromCLSID(new Guid("56FDF344-FD6D-11d0-958A-006097C9A090"));
+        if (type is null || Activator.CreateInstance(type) is not ITaskbarList2 list) return null;
+        list.HrInit();
+        return list;
+    }
+
+    [ComImport, Guid("602D4995-B13A-429b-A66E-1935E44F4317"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ITaskbarList2
+    {
+        void HrInit();
+        void AddTab(IntPtr hwnd);
+        void DeleteTab(IntPtr hwnd);
+        void ActivateTab(IntPtr hwnd);
+        void SetActiveAlt(IntPtr hwnd);
+        void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fullscreen);
     }
 
     // ---- Player state → visuals ----
@@ -176,6 +217,9 @@ public partial class MainWindow : Window, IUiServices
         var p = _vm.Player;
         switch (e.PropertyName)
         {
+            case nameof(PlayerViewModel.Position):
+                SyncSeekBar();
+                break;
             case nameof(PlayerViewModel.IsPlaying):
                 PlayIcon.Data = (Geometry)FindResource(p.IsPlaying ? "I.Pause" : "I.Play");
                 PlayButton.ToolTip = p.IsPlaying ? "Pause (Space)" : "Play (Space)";
@@ -260,12 +304,24 @@ public partial class MainWindow : Window, IUiServices
 
     // ---- Seeking ----
 
+    // The seek bar isn't data-bound: the player position is pushed into it (SyncSeekBar), and any change
+    // that doesn't come from that push is the user's — a click, a drag, the keyboard or an accessibility tool.
+    private bool _syncingSeekBar;
+
+    private void SyncSeekBar()
+    {
+        if (_scrubbing == SeekBar) return;
+        _syncingSeekBar = true;
+        SeekBar.Value = _vm.Player.Position;
+        _syncingSeekBar = false;
+    }
+
     private void OnScrubStart(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Slider slider) return;
         _scrubbing = slider;
         if (slider == SeekBar) _vm.Player.IsSeeking = true;
-        slider.CaptureMouse();
+        slider.CaptureMouse(); // best effort: the release below commits even without capture
         ScrubTo(slider, e);
         e.Handled = true;
     }
@@ -279,19 +335,26 @@ public partial class MainWindow : Window, IUiServices
     {
         if (_scrubbing != sender) return;
         ScrubTo(_scrubbing, e);
-        _scrubbing.ReleaseMouseCapture(); // raises LostMouseCapture, which finishes the seek
+        FinishScrub();
         e.Handled = true;
     }
 
+    /// <summary>Capture can also end without a button-up (Alt+Tab, a tap that never captured); commit then too.</summary>
     private void OnScrubLost(object sender, MouseEventArgs e)
     {
-        if (_scrubbing != sender) return;
+        if (_scrubbing == sender) FinishScrub();
+    }
+
+    private void FinishScrub()
+    {
         var slider = _scrubbing;
-        _scrubbing = null;
+        if (slider is null) return;
+        _scrubbing = null; // before releasing capture, so LostMouseCapture doesn't finish twice
+        slider.ReleaseMouseCapture();
         if (slider == SeekBar)
         {
-            _vm.Player.Seek(slider.Value);
             _vm.Player.IsSeeking = false;
+            _vm.Player.Seek(slider.Value);
         }
     }
 
@@ -303,7 +366,9 @@ public partial class MainWindow : Window, IUiServices
 
     private void OnSeekMoved(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_vm.Player.IsSeeking) _vm.Player.TimeText = _vm.Player.FormatAt(e.NewValue);
+        if (_syncingSeekBar) return;
+        if (_scrubbing == SeekBar) _vm.Player.TimeText = _vm.Player.FormatAt(e.NewValue); // preview while dragging
+        else _vm.Player.Seek(e.NewValue); // keyboard / accessibility change
     }
 
     // ---- Menus ----
@@ -492,6 +557,13 @@ public partial class MainWindow : Window, IUiServices
 
     public bool Confirm(string title, string message, string okText) =>
         InputDialog.Confirm(this, title, message, okText);
+
+    public void ShowSubtitleSearch(string videoPath)
+    {
+        // Fullscreen hides the title bar the dialog would centre under; leave fullscreen first.
+        if (_vm.IsFullscreen) ToggleFullscreen();
+        new SubtitleSearchWindow(this, _vm.Subtitles, _vm.Player, _vm.Store, videoPath).ShowDialog();
+    }
 
     private sealed class Win32Owner : System.Windows.Forms.IWin32Window
     {

@@ -21,6 +21,7 @@ public interface IUiServices
     string[] PickFiles(string filter, bool multiple);
     string? Prompt(string title, string hint, string initial, string okText);
     bool Confirm(string title, string message, string okText);
+    void ShowSubtitleSearch(string videoPath);
 }
 
 public sealed partial class RailItem : ObservableObject
@@ -43,6 +44,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public LibraryStore Store { get; }
     public PlayerViewModel Player { get; }
     public PanelViewModel Panel { get; } = new();
+    public SubtitleService Subtitles { get; }
     public ObservableCollection<RailItem> Rail { get; } = new();
 
     [ObservableProperty] private bool _isPanelOpen;
@@ -58,6 +60,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Store.Load();
         Player = new PlayerViewModel(Store, dispatcher);
         _meta = new MetadataService(Player.LibVLC, Store, dispatcher);
+        Subtitles = new SubtitleService(Store.Data.Subtitles);
+        Player.MediaStarted += path => _ = AutoSubtitlesAsync(path);
         _isPanelOpen = Store.Data.PanelOpen;
 
         Rail.Add(new RailItem { Key = "home", Label = "Home", Icon = Ico("Home"), Page = HomePage });
@@ -195,6 +199,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         new("Open file…", OpenFiles, Gesture: "Ctrl+O"),
         new("Open folder…", OpenFolder, Gesture: "Ctrl+Shift+O"),
         new("Open network stream…", OpenNetworkStream, Gesture: "Ctrl+N"),
+        new("Find subtitles online…", FindSubtitles),
         MenuAction.Separator,
         new("Playback", Children: PlaybackMenu()),
         MenuAction.Separator,
@@ -242,6 +247,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 if (f.Length > 0) Player.AddSubtitleFile(f[0]);
             }));
             items.Add(new MenuAction("Subtitles", Children: subs));
+            if (Player.Kind == MediaKind.Video && File.Exists(Player.CurrentPath))
+                items.Add(new MenuAction("Find subtitles online…", () => _ui.ShowSubtitleSearch(Player.CurrentPath!)));
         }
 
         var audio = Player.AudioTracks;
@@ -333,7 +340,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (System.ComponentModel.Win32Exception) { }
     }
 
-    public void Dispose() => Player.Dispose();
+    private void FindSubtitles()
+    {
+        if (Player.Kind == MediaKind.Video && Player.CurrentPath is { } path && File.Exists(path)) _ui.ShowSubtitleSearch(path);
+        else Player.ShowMessage("Play a video file first, then search for its subtitles.");
+    }
+
+    /// <summary>VLsub-style automatic subtitles: only for local videos that start without any subtitle track.</summary>
+    private async Task AutoSubtitlesAsync(string path)
+    {
+        if (Player.Kind != MediaKind.Video || !File.Exists(path) || !Subtitles.Settings.AutoDownload || !Subtitles.IsConfigured) return;
+        await Task.Delay(1500); // tracks (embedded or "video.lang.srt" next to it) are known shortly after start
+        if (!string.Equals(Player.CurrentPath, path, StringComparison.OrdinalIgnoreCase)) return;
+        if (Player.SubtitleTracks.Any(t => t.Id != -1)) return;
+
+        try
+        {
+            var found = await Subtitles.AutoDownloadAsync(path);
+            if (found is not { } f || !string.Equals(Player.CurrentPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            Player.AddSubtitleFile(f.Path);
+            Player.ShowMessage($"Subtitles added automatically ({f.Result.Language}). Change them from the subtitles button.");
+        }
+        catch (OpenSubtitlesException e)
+        {
+            Player.ShowMessage("Automatic subtitles: " + e.Message);
+        }
+    }
+
+    public void Dispose()
+    {
+        Player.Dispose();
+        Subtitles.Dispose();
+    }
 
     private static Geometry Ico(string key) => (Geometry)Application.Current.Resources["I." + key];
 }
