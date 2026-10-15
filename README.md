@@ -97,5 +97,7 @@ Hard Hat Media Player is licensed under the **GNU General Public License v3.0 or
 - Interface based on [“VLC Redesign”](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) by
   Juxtopposed (Figma Community, CC BY 4.0), shown in [this video](https://youtu.be/ERFeOgqk324).
 - Playback by libVLC and LibVLCSharp from VideoLAN (LGPL 2.1+).
+- App icon: [“Hard Hat”](https://thenounproject.com/icon/hard-hat-7630923/) by sentya irma from Noun Project
+  (CC BY 3.0), recoloured.
 
 Full details of third-party components are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

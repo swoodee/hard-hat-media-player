@@ -270,7 +270,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         "hardhatmediaplayer.com\n\n" +
         "Licensed under the GNU GPL v3 or later.\n" +
         "Playback: libVLC and LibVLCSharp by VideoLAN (LGPL 2.1+).\n" +
-        "Interface based on “VLC Redesign” by Juxtopposed (Figma Community, CC BY 4.0).\n\n" +
+        "Interface based on “VLC Redesign” by Juxtopposed (Figma Community, CC BY 4.0).\n" +
+        "Icon: “Hard Hat” by sentya irma from Noun Project (CC BY 3.0).\n\n" +
         $"Library data: {LibraryStore.AppDir}", "OK");
 
     private const string MediaFilter =

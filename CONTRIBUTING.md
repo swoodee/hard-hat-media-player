@@ -37,7 +37,7 @@ dotnet run --project src/HardHatMediaPlayer
 3. Make sure `dotnet build` passes without warnings and try your change in the app.
 4. Open a pull request describing what changed and how you tested it. Screenshots help for UI changes.
 
-The app icon is drawn in `src/HardHatMediaPlayer/Themes/AppMark.xaml`. If you change it, regenerate the
+The app icon (“Hard Hat” by sentya irma, Noun Project, CC BY 3.0) lives in `src/HardHatMediaPlayer/Themes/AppMark.xaml`. If you change it, regenerate the
 icon file with `powershell -File scripts/make-icon.ps1`.
 
 ## License of contributions

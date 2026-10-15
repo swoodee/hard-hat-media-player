@@ -12,6 +12,7 @@ third-party work, each under its own license. All of these licenses are compatib
 | .NET / WPF | Runtime and UI framework | MIT | <https://github.com/dotnet> |
 | “VLC Redesign” Figma prototype by Juxtopposed | Interface design the UI is based on | CC BY 4.0 | <https://www.figma.com/community/file/1691465999134370980/vlc-redesign> |
 | Lucide-style icon shapes | Interface icons (redrawn) | ISC | <https://lucide.dev> |
+| “Hard Hat” by sentya irma from Noun Project | App icon (recoloured; original SVG in `src/HardHatMediaPlayer/Assets/hard-hat-7630923.svg`) | CC BY 3.0 | <https://thenounproject.com/icon/hard-hat-7630923/> |
 
 ## Notes for redistributors
 
@@ -19,5 +20,7 @@ third-party work, each under its own license. All of these licenses are compatib
   package, dynamically loaded. If you distribute binaries, include this notice and the LGPL text, and point
   to VideoLAN's source (links above). Users must remain able to replace those DLLs with their own build.
 - **Design (CC BY 4.0)**: keep the credit to Juxtopposed in the README and the About box.
+- **App icon (CC BY 3.0)**: keep the credit to sentya irma / Noun Project in the README and the About box.
+  The icon is a separate asset under its own license, not covered by the GPL.
 - **Trademarks**: "VLC" and the traffic-cone logo are VideoLAN trademarks and are not used for this app's
   name or icon.
