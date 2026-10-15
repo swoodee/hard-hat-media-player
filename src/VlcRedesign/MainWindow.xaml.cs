@@ -38,7 +38,8 @@ public partial class MainWindow : Window, IUiServices
         Video.MediaPlayer = _vm.Player.Player;
 
         _hideControls = new DispatcherTimer(TimeSpan.FromSeconds(2.5), DispatcherPriority.Normal, (_, _) => HideControls(), Dispatcher);
-        _singleClick = new DispatcherTimer(TimeSpan.FromMilliseconds(230), DispatcherPriority.Normal, (_, _) =>
+        // Wait the system double-click time (touch double-taps are slower than mouse ones) before treating a click as single.
+        _singleClick = new DispatcherTimer(TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime + 20), DispatcherPriority.Normal, (_, _) =>
         {
             _singleClick!.Stop();
             _vm.Player.TogglePlay();
@@ -48,6 +49,11 @@ public partial class MainWindow : Window, IUiServices
         _vm.PropertyChanged += OnViewModelChanged;
         _vm.Player.PropertyChanged += OnPlayerChanged;
         _vm.FullscreenToggled += ToggleFullscreen;
+        _vm.ShortcutsRequested += ToggleShortcuts;
+        _vm.Player.Osd += ShowOsd;
+        _vm.Player.PlayToggled += FlashPlayState;
+        ShortcutList.ItemsSource = Shortcuts;
+        Panel.SetZIndex(ShortcutsLayer, 10);
         _vm.Panel.Refreshing += () => _scrollBeforeRefresh = ListScroller?.VerticalOffset ?? 0;
         _vm.Panel.Refreshed += () => Dispatcher.BeginInvoke(() => ListScroller?.ScrollToVerticalOffset(_scrollBeforeRefresh), DispatcherPriority.Loaded);
         StateChanged += (_, _) =>
@@ -68,7 +74,12 @@ public partial class MainWindow : Window, IUiServices
         {
             // Keys pressed while the video overlay window has focus should still work.
             if (GetWindow(Overlay) is { } overlayWindow && overlayWindow != this)
+            {
                 overlayWindow.PreviewKeyDown += OnKeyDown;
+                MakeNonActivating(overlayWindow);
+                // Belt and braces: if it is activated anyway, hand activation straight back to this window.
+                overlayWindow.Activated += (_, _) => Dispatcher.BeginInvoke(Activate);
+            }
         };
         Loaded += (_, _) =>
         {
@@ -163,10 +174,13 @@ public partial class MainWindow : Window, IUiServices
             WindowState = WindowState.Maximized;
             MarkFullscreen(true);
             Activate();
+            Topmost = IsActive;
+            _vm.Player.ShowOsd("Fullscreen", "Esc, F or double-click to exit", "Fullscreen");
         }
         else
         {
             _vm.IsFullscreen = false;
+            Topmost = false;
             MarkFullscreen(false);
             ResizeMode = ResizeMode.CanResize;
             WindowState = WindowState.Normal;
@@ -470,6 +484,8 @@ public partial class MainWindow : Window, IUiServices
             case Key.Right when alt: _vm.Panel.ForwardCommand.Execute(null); break;
             case Key.Back when !typing: _vm.Panel.BackCommand.Execute(null); break;
             case Key.F11: ToggleFullscreen(); break;
+            case Key.Escape when ShortcutsLayer.IsVisible: ToggleShortcuts(); break;
+            case Key.F1: ToggleShortcuts(); break;
             case Key.Escape when _vm.IsFullscreen: ToggleFullscreen(); break;
             case Key.Escape when _vm.Panel.IsSearchOpen: _vm.Panel.ToggleSearchCommand.Execute(null); break;
             case Key.MediaPlayPause: p.TogglePlay(); break;
@@ -494,9 +510,14 @@ public partial class MainWindow : Window, IUiServices
                 case Key.N: p.Next(); break;
                 case Key.P: p.Previous(); break;
                 case Key.S: p.Stop(); break;
+                case Key.OemQuestion when shift: ToggleShortcuts(); break; // "?"
+                case Key.OemOpenBrackets: p.Slower(); break;               // "["
+                case Key.OemCloseBrackets: p.Faster(); break;              // "]"
+                case Key.OemPlus when !shift: p.NormalSpeed(); break;      // "="
+                case Key.V: p.CycleSubtitles(); break;
+                case Key.B: p.CycleAudioTracks(); break;
                 default: handled = false; break;
             }
-            if (handled) ShowControls();
         }
 
         e.Handled = handled;
@@ -531,6 +552,115 @@ public partial class MainWindow : Window, IUiServices
         SaveBounds(_vm.Store.Data);
         _vm.Dispose();
     }
+
+    // ---- On-screen display ----
+
+    private DispatcherTimer? _osdTimer;
+
+    private void ShowOsd(OsdMessage m)
+    {
+        OsdText.Text = m.Text;
+        OsdHint.Text = m.Hint ?? "";
+        OsdHint.Visibility = m.Hint is null ? Visibility.Collapsed : Visibility.Visible;
+        OsdIcon.Data = m.Icon is null ? null : TryFindResource("I." + m.Icon) as Geometry;
+        OsdIcon.Visibility = OsdIcon.Data is null ? Visibility.Collapsed : Visibility.Visible;
+        OsdLevel.Visibility = m.Level is null ? Visibility.Collapsed : Visibility.Visible;
+        OsdLevelFill.Width = OsdLevel.Width * Math.Clamp(m.Level ?? 0, 0, 1);
+
+        OsdPill.BeginAnimation(OpacityProperty, null);
+        OsdPill.Opacity = 1;
+        _osdTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(1.6), DispatcherPriority.Normal, (_, _) =>
+        {
+            _osdTimer!.Stop();
+            OsdPill.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(350)));
+        }, Dispatcher);
+        _osdTimer.Stop();
+        _osdTimer.Start();
+    }
+
+    private void FlashPlayState(bool playing)
+    {
+        if (!_vm.Player.HasVideo) return; // audio has its own card; a flash over it adds nothing
+        CenterFlashIcon.Data = (Geometry)FindResource(playing ? "I.Play" : "I.Pause");
+        var grow = new System.Windows.Media.Animation.DoubleAnimation(0.85, 1.15, TimeSpan.FromMilliseconds(500));
+        CenterFlash.RenderTransformOrigin = new Point(0.5, 0.5);
+        CenterFlash.RenderTransform = new ScaleTransform();
+        ((ScaleTransform)CenterFlash.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        ((ScaleTransform)CenterFlash.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        CenterFlash.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(600)));
+    }
+
+    // ---- Keyboard shortcuts sheet ----
+
+    private sealed record Shortcut(string Keys, string Action);
+
+    private static readonly Shortcut[] Shortcuts =
+    {
+        new("Space", "Play / pause"),
+        new("\u2190  \u2192", "Jump 10 s back / forward"),
+        new("Shift + \u2190  \u2192", "Jump 3 s"),
+        new("\u2191  \u2193  /  wheel", "Volume up / down"),
+        new("M", "Mute"),
+        new("F  /  F11", "Fullscreen"),
+        new("Double-click", "Fullscreen"),
+        new("Esc", "Leave fullscreen / close"),
+        new("N  /  P", "Next / previous"),
+        new("S", "Stop"),
+        new("[  /  ]", "Slower / faster"),
+        new("=", "Normal speed"),
+        new("V", "Next subtitle track"),
+        new("B", "Next audio track"),
+        new("Ctrl + O", "Open file"),
+        new("Ctrl + Shift + O", "Open folder"),
+        new("Ctrl + N", "Open network stream"),
+        new("Ctrl + B", "Show / hide library"),
+        new("Ctrl + F", "Search the library page"),
+        new("Alt + \u2190  \u2192", "Library back / forward"),
+        new("Backspace", "Library back"),
+        new("F1  /  ?", "This list"),
+    };
+
+    private void ToggleShortcuts()
+    {
+        ShortcutsLayer.Visibility = ShortcutsLayer.IsVisible ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnShortcutsBackdrop(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource == ShortcutsLayer) ToggleShortcuts();
+        e.Handled = true; // don't let the click reach the video (pause / fullscreen)
+    }
+
+    // ---- Fullscreen helpers ----
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (_vm.IsFullscreen) Topmost = true;
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        // Only cover the taskbar while the video is the window in use; Alt+Tab must still work normally.
+        if (Topmost && !IsOverlayActive()) Topmost = false;
+    }
+
+    private bool IsOverlayActive() => GetWindow(Overlay) is { } w && w != this && w.IsActive;
+
+    private static void MakeNonActivating(Window window)
+    {
+        const int GWL_EXSTYLE = -20, WS_EX_NOACTIVATE = 0x08000000;
+        var hwnd = new WindowInteropHelper(window).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64() | WS_EX_NOACTIVATE));
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
 
     // ---- IUiServices ----
 

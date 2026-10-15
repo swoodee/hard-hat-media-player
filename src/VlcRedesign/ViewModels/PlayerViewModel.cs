@@ -182,10 +182,68 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.Volume = value;
         _store.Data.Volume = value;
         if (value > 0 && IsMuted) IsMuted = false;
+        ShowOsd($"Volume {value}%", "\u2191 \u2193 or mouse wheel", VolumeIcon(value), value / 125.0);
     }
 
-    partial void OnIsMutedChanged(bool value) => Player.Mute = value;
-    partial void OnRateChanged(float value) => Player.SetRate(value);
+    partial void OnIsMutedChanged(bool value)
+    {
+        Player.Mute = value;
+        ShowOsd(value ? "Muted" : $"Sound on \u00b7 {Volume}%", "M", value ? "Mute" : VolumeIcon(Volume), value ? 0 : Volume / 125.0);
+    }
+
+    partial void OnRateChanged(float value)
+    {
+        Player.SetRate(value);
+        ShowOsd(Math.Abs(value - 1f) < 0.001f ? "Normal speed" : $"Speed {value:0.##}\u00d7", "[ slower  \u00b7  ] faster  \u00b7  = normal", "Speed");
+    }
+
+    partial void OnShuffleChanged(bool value) => ShowOsd(value ? "Shuffle on" : "Shuffle off", null, "Shuffle");
+
+    partial void OnRepeatChanged(RepeatMode value) =>
+        ShowOsd(value switch { RepeatMode.All => "Repeat all", RepeatMode.One => "Repeat this one", _ => "Repeat off" }, null, "Repeat");
+
+    private static string VolumeIcon(int volume) => volume == 0 ? "Mute" : volume < 50 ? "VolumeLow" : "Volume";
+
+    // ---- On-screen feedback ----
+
+    /// <summary>Short on-screen message: what just happened, the shortcut for it, an icon and an optional level bar.</summary>
+    public event Action<OsdMessage>? Osd;
+
+    /// <summary>Play/pause was toggled by the user; the view flashes a big icon. True = now playing.</summary>
+    public event Action<bool>? PlayToggled;
+
+    public void ShowOsd(string text, string? hint = null, string? icon = null, double? level = null) =>
+        Osd?.Invoke(new OsdMessage(text, hint, icon, level));
+
+    private static readonly float[] Speeds = { 0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f };
+
+    public void Faster() => Rate = Speeds.FirstOrDefault(s => s > Rate + 0.001f, Speeds[^1]);
+    public void Slower() => Rate = Speeds.LastOrDefault(s => s < Rate - 0.001f, Speeds[0]);
+    public void NormalSpeed() => Rate = 1f;
+
+    public void CycleSubtitles()
+    {
+        var tracks = SubtitleTracks.ToList();
+        if (tracks.Count == 0)
+        {
+            ShowOsd("No subtitles", "Find some: \u2026 menu \u2192 Find subtitles online", "Subtitles");
+            return;
+        }
+        var i = tracks.FindIndex(t => t.Id == SubtitleTrack);
+        SetSubtitleTrack(tracks[(i + 1) % tracks.Count].Id);
+    }
+
+    public void CycleAudioTracks()
+    {
+        var tracks = AudioTracks.Where(t => t.Id != -1).ToList();
+        if (tracks.Count < 2)
+        {
+            ShowOsd(tracks.Count == 1 ? $"Audio: {tracks[0].Name}" : "No audio tracks", "Only one track", "Volume");
+            return;
+        }
+        var i = tracks.FindIndex(t => t.Id == AudioTrack);
+        SetAudioTrack(tracks[(i + 1) % tracks.Count].Id);
+    }
 
     // ---- Queue ----
 
@@ -305,8 +363,17 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (Player.State is VLCState.Ended or VLCState.Stopped or VLCState.Error) PlayCurrent();
-        else Player.SetPause(Player.IsPlaying);
+        if (Player.State is VLCState.Ended or VLCState.Stopped or VLCState.Error)
+        {
+            PlayCurrent();
+            PlayToggled?.Invoke(true);
+        }
+        else
+        {
+            var pausing = Player.IsPlaying;
+            Player.SetPause(pausing);
+            PlayToggled?.Invoke(!pausing);
+        }
     }
 
     [RelayCommand]
@@ -314,7 +381,12 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     {
         if (_queue.Count == 0) return;
         SaveProgress();
-        if (TryAdvance(1, Repeat != RepeatMode.Off)) PlayCurrent();
+        if (TryAdvance(1, Repeat != RepeatMode.Off))
+        {
+            PlayCurrent();
+            ShowOsd(Title, "N next  \u00b7  P previous", "Next");
+        }
+        else ShowOsd("End of the queue", null, "Next");
     }
 
     [RelayCommand]
@@ -330,6 +402,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         // At the start of the queue (and not repeating) this restarts the current item.
         TryAdvance(-1, Repeat == RepeatMode.All);
         PlayCurrent(0);
+        ShowOsd(Title, "N next  \u00b7  P previous", "Prev");
     }
 
     [RelayCommand]
@@ -377,6 +450,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.Position = (float)fraction;
         Position = fraction;
         TimeText = FormatAt(fraction);
+        ShowOsd($"{TimeText} / {DurationText}", "\u2190 \u2192 jump 10 s  \u00b7  Shift for 3 s", "Seek", fraction);
         // libVLC seeks asynchronously; don't let the next ticks pull the bar back to the old time.
         _seekSettles = DateTime.Now.AddMilliseconds(700);
     }
@@ -389,6 +463,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.Time = target;
         if (length > 0) Position = target / (double)length;
         TimeText = Format(target);
+        var step = Math.Abs(ms) / 1000;
+        ShowOsd($"{(ms < 0 ? "\u2212" : "+")}{step} s  \u00b7  {TimeText} / {DurationText}", "\u2190 \u2192 jump 10 s  \u00b7  Shift for 3 s",
+            ms < 0 ? "Rewind" : "Forward", length > 0 ? target / (double)length : null);
         _seekSettles = DateTime.Now.AddMilliseconds(700);
     }
 
@@ -407,8 +484,19 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public int AudioTrack => Player.AudioTrack;
     public int SubtitleTrack => Player.Spu;
 
-    public void SetAudioTrack(int id) => Player.SetAudioTrack(id);
-    public void SetSubtitleTrack(int id) => Player.SetSpu(id);
+    public void SetAudioTrack(int id)
+    {
+        Player.SetAudioTrack(id);
+        var name = AudioTracks.FirstOrDefault(t => t.Id == id).Name;
+        ShowOsd(id == -1 ? "Audio off" : $"Audio: {name}", "B to switch", "Volume");
+    }
+
+    public void SetSubtitleTrack(int id)
+    {
+        Player.SetSpu(id);
+        var name = SubtitleTracks.FirstOrDefault(t => t.Id == id).Name;
+        ShowOsd(id == -1 ? "Subtitles off" : $"Subtitles: {name}", "V to switch", "Subtitles");
+    }
 
     public void AddSubtitleFile(string file)
     {
@@ -498,3 +586,5 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         LibVLC.Dispose();
     }
 }
+
+public sealed record OsdMessage(string Text, string? Hint, string? Icon, double? Level);

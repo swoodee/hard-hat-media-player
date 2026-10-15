@@ -331,8 +331,66 @@
                         </StackPanel>
                     </Grid>
 
+                    <!-- Big play/pause flash in the middle of the video -->
+                    <Border x:Name="CenterFlash" Width="96" Height="96" CornerRadius="48" Background="#A0101010" Opacity="0"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <ctl:Icon x:Name="CenterFlashIcon" Data="{StaticResource I.Pause}" Filled="True" Width="40" Height="40" Foreground="White"/>
+                    </Border>
+
+                    <!-- On-screen display: what just happened and its shortcut -->
+                    <Border x:Name="OsdPill" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" CornerRadius="12"
+                            Background="#EB181818" BorderBrush="#2C2C2C" BorderThickness="1" Padding="16,10" Opacity="0" IsHitTestVisible="False">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <ctl:Icon x:Name="OsdIcon" Width="18" Height="18" StrokeThickness="1.8" Margin="0,0,10,0" Foreground="{StaticResource AccentBrush}"/>
+                                <TextBlock x:Name="OsdText" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                            </StackPanel>
+                            <Grid x:Name="OsdLevel" Width="180" Height="4" Margin="0,9,0,0">
+                                <Border Background="#44FFFFFF" CornerRadius="2"/>
+                                <Border x:Name="OsdLevelFill" Background="{StaticResource AccentBrush}" CornerRadius="2" HorizontalAlignment="Left"/>
+                            </Grid>
+                            <TextBlock x:Name="OsdHint" FontSize="12" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,7,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Keyboard shortcuts (F1 or ?) -->
+                    <Grid x:Name="ShortcutsLayer" Background="#B0000000" Visibility="Collapsed" MouseLeftButtonDown="OnShortcutsBackdrop">
+                        <Border Background="{StaticResource PopupBrush}" BorderBrush="{StaticResource PopupBorderBrush}" BorderThickness="1" CornerRadius="14"
+                                Padding="24,18" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760" Margin="24">
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
+                                    <StackPanel Orientation="Horizontal">
+                                        <ctl:Icon Data="{StaticResource I.Keyboard}" Width="20" Height="20" Foreground="{StaticResource AccentBrush}" StrokeThickness="1.8"/>
+                                        <TextBlock Text="Keyboard shortcuts" FontSize="16" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="F1 or ? to close" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <ItemsControl x:Name="ShortcutList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="2"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,4,24,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Background="#2C2C2C" CornerRadius="5" Padding="7,2" HorizontalAlignment="Left">
+                                                    <TextBlock Text="{Binding Keys}" FontFamily="Cascadia Mono, Consolas" FontSize="12"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="1" Text="{Binding Action}" Foreground="{StaticResource Text2Brush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
                     <!-- Error toast -->
-                    <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="16,18,16,0" CornerRadius="8" Background="#F02A1A1A"
+                    <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="16,110,16,0" CornerRadius="8" Background="#F02A1A1A"
                             BorderBrush="#5A2A2A" BorderThickness="1" Padding="14,8" IsHitTestVisible="False"
                             Visibility="{Binding Player.Error, Converter={StaticResource Vis}}">
                         <TextBlock Text="{Binding Player.Error}" Foreground="#FFB4A8" TextWrapping="Wrap" MaxWidth="520"/>

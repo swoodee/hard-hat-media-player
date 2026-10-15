@@ -52,6 +52,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isFullscreen;
 
     public event Action? FullscreenToggled;
+    public event Action? ShortcutsRequested;
 
     public MainViewModel(IUiServices ui, Dispatcher dispatcher)
     {
@@ -206,6 +207,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         new("Show library panel", TogglePanel, IsChecked: IsPanelOpen, Gesture: "Ctrl+B"),
         new("Fullscreen", ToggleFullscreen, Gesture: "F11"),
         MenuAction.Separator,
+        new("Keyboard shortcuts", () => ShortcutsRequested?.Invoke(), Gesture: "F1"),
         new("About", ShowAbout),
         new("Exit", () => Application.Current.MainWindow?.Close(), Gesture: "Alt+F4"),
     };
