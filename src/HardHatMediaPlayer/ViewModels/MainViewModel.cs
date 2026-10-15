@@ -233,35 +233,73 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         };
     }
 
-    /// <summary>Audio and subtitle tracks for the player's track button.</summary>
-    public IReadOnlyList<MenuAction> TracksMenu()
+    /// <summary>The subtitles button: tracks, adding and finding subtitles. The window adds the delay slider below.</summary>
+    public IReadOnlyList<MenuAction> SubtitlesMenu()
     {
         var items = new List<MenuAction>();
         if (Player.HasMedia)
         {
-            var subs = Player.SubtitleTracks
-                .Select(t => new MenuAction(t.Id == -1 ? "Off" : t.Name, () => Player.SetSubtitleTrack(t.Id), IsChecked: t.Id == Player.SubtitleTrack))
-                .ToList();
-            if (subs.Count > 0) subs.Add(MenuAction.Separator);
-            subs.Add(new MenuAction("Add subtitle file…", () =>
+            var tracks = Player.SubtitleTracks;
+            if (tracks.Count == 0) items.Add(new MenuAction("No subtitle tracks"));
+            items.AddRange(tracks.Select(t => new MenuAction(t.Id == -1 ? "Off" : t.Name, () => Player.SetSubtitleTrack(t.Id), IsChecked: t.Id == Player.SubtitleTrack)));
+            items.Add(MenuAction.Separator);
+            items.Add(new MenuAction("Add subtitle file…", () =>
             {
                 var f = _ui.PickFiles("Subtitles|*.srt;*.ass;*.ssa;*.sub;*.vtt;*.idx|All files|*.*", false);
                 if (f.Length > 0) Player.AddSubtitleFile(f[0]);
             }));
-            items.Add(new MenuAction("Subtitles", Children: subs));
             if (Player.Kind == MediaKind.Video && File.Exists(Player.CurrentPath))
                 items.Add(new MenuAction("Find subtitles online…", () => _ui.ShowSubtitleSearch(Player.CurrentPath!)));
         }
-
-        var audio = Player.AudioTracks;
-        if (audio.Count > 0)
-            items.Add(new MenuAction("Audio track", Children: audio
-                .Select(t => new MenuAction(t.Id == -1 ? "Disable" : t.Name, () => Player.SetAudioTrack(t.Id), IsChecked: t.Id == Player.AudioTrack))
-                .ToList()));
-
-        if (items.Count > 0) items.Add(MenuAction.Separator);
-        items.AddRange(PlaybackMenu().Skip(5)); // speed, shuffle, repeat
+        items.Add(new MenuAction("Default languages…", () => EditLanguages(subtitles: true), Gesture: LanguagesLabel(Store.Data.SubtitleLanguages)));
+        AddPresetItem(items);
         return items;
+    }
+
+    /// <summary>The audio button: tracks and output device. The window adds the delay slider below.</summary>
+    public IReadOnlyList<MenuAction> AudioMenu()
+    {
+        var items = new List<MenuAction>();
+        if (Player.HasMedia)
+        {
+            var tracks = Player.AudioTracks;
+            if (tracks.Count == 0) items.Add(new MenuAction("No audio tracks"));
+            items.AddRange(tracks.Select(t => new MenuAction(t.Id == -1 ? "Disable" : t.Name, () => Player.SetAudioTrack(t.Id), IsChecked: t.Id == Player.AudioTrack)));
+            items.Add(MenuAction.Separator);
+        }
+        var devices = Player.AudioDevices;
+        if (devices.Count > 0)
+        {
+            var current = Player.AudioDevice ?? "";
+            items.Add(new MenuAction("Output device", Children: devices
+                .Select(d => new MenuAction(d.Id.Length == 0 ? "System default" : d.Name, () => Player.SetAudioDevice(d.Id, d.Name), IsChecked: d.Id == current))
+                .ToList()));
+        }
+        items.Add(new MenuAction("Default languages…", () => EditLanguages(subtitles: false), Gesture: LanguagesLabel(Store.Data.AudioLanguages)));
+        AddPresetItem(items);
+        return items;
+    }
+
+    private void AddPresetItem(List<MenuAction> items)
+    {
+        if (Player.CurrentPreset != null)
+            items.Add(new MenuAction("Forget this folder's choices", Player.ForgetPreset));
+    }
+
+    private static string LanguagesLabel(string list) => string.IsNullOrWhiteSpace(list) ? "Automatic" : string.Join(", ", Languages.ParseList(list));
+
+    private void EditLanguages(bool subtitles)
+    {
+        var current = subtitles ? Store.Data.SubtitleLanguages : Store.Data.AudioLanguages;
+        var value = _ui.Prompt(subtitles ? "Default subtitle languages" : "Default audio languages",
+            "In order of preference, e.g. “ro, en”. Used in folders where you haven't picked a track yet; leave empty to let the file decide.",
+            current, "Save");
+        if (value is null) return;
+        var list = string.Join(", ", Languages.ParseList(value));
+        if (subtitles) Store.Data.SubtitleLanguages = list;
+        else Store.Data.AudioLanguages = list;
+        Store.Save();
+        Player.ShowOsd(list.Length == 0 ? "Default languages cleared" : $"Default {(subtitles ? "subtitle" : "audio")} languages: {list}", null, subtitles ? "Subtitles" : "Audio");
     }
 
     private void ShowAbout() => _ui.Confirm("About Hard Hat Media Player",

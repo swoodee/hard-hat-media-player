@@ -16,6 +16,9 @@ A free, open-source media player for Windows, with a clean modern interface and 
   from tags), Network, Playlists, History. Search, sort and right-click menus everywhere.
 - **Player**: auto-hiding floating controls, seek and volume bars you can click or drag, shuffle, repeat,
   speed, subtitle and audio tracks, external subtitle files, true fullscreen (the taskbar gets out of the way).
+- **Subtitles and audio buttons** in the controls: tracks, subtitle and audio delay sliders (−5 s to +5 s), the
+  audio output device, and **per-folder presets**: pick a track or fix the sync once and the next episode in that
+  folder starts the same way. See [Subtitles](#subtitles).
 - **On-screen feedback** for every action (volume, seeking, speed, tracks…) with the matching shortcut,
   and a keyboard cheat sheet on **F1** or **?**.
 - **Online subtitles** (VLsub-style) from OpenSubtitles.com: search by file hash or by name, download, and
@@ -46,6 +49,8 @@ You can pass files or folders on the command line, or drag them onto the window.
 | N / P / S | Next / previous / stop |
 | [ / ] / = | Slower / faster / normal speed |
 | V / B | Next subtitle track / next audio track |
+| G / H | Subtitle delay −50 ms / +50 ms |
+| J / K | Audio delay −50 ms / +50 ms |
 | Ctrl+O, Ctrl+Shift+O, Ctrl+N | Open file / folder / network stream |
 | Ctrl+B, Ctrl+F | Show or hide the library / search it |
 | Alt+← / Alt+→, Backspace | Library back / forward |
@@ -53,7 +58,7 @@ You can pass files or folders on the command line, or drag them onto the window.
 
 ## Subtitles
 
-Open **… → Find subtitles online…**, or the subtitles button in the player → **Subtitles → Find subtitles online…**.
+Open **… → Find subtitles online…**, or the subtitles button in the player → **Find subtitles online…**.
 Search **by hash** (subtitles made for that exact file) or **by name**, pick a result, and choose **Download and use**.
 The file is saved next to the video as `video.lang.srt`, so it loads automatically next time.
 
@@ -66,6 +71,16 @@ your own free API key:
 1. Create a free account at opensubtitles.com and get an API key at <https://www.opensubtitles.com/consumers>.
 2. In the Find subtitles window, choose **Account…** and paste the key. Username and password are optional and raise
    the daily download limit. The password is stored encrypted for your Windows account (DPAPI).
+
+### Sync and presets
+
+The subtitles and audio buttons on the right of the controls each have a delay slider (−5 s to +5 s in 50 ms steps;
+**G / H** and **J / K** do the same from the keyboard). Delays, and the subtitle and audio track you pick, are
+remembered **per folder**: the next file from the same folder (the next episode) starts with the same delays and
+the tracks in the same languages. **Forget this folder's choices** in either menu clears them.
+
+In folders without a choice, **Default languages…** (e.g. `ro, en`) picks the first subtitle and audio track in
+one of those languages; leave it empty to let the file decide.
 
 ## Your data
 

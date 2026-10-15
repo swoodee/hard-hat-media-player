@@ -47,6 +47,22 @@ public sealed class AudioMeta
     public long Stamp { get; set; }
 }
 
+/// <summary>Subtitle and audio choices remembered for one folder (usually a show's season).</summary>
+public sealed class FolderPreset
+{
+    public long SubtitleDelayMs { get; set; }
+    public long AudioDelayMs { get; set; }
+
+    /// <summary>Two-letter code ("ro"), "off" for no subtitles, or null when the track had no recognisable language.</summary>
+    public string? SubtitleLanguage { get; set; }
+
+    /// <summary>The chosen track's name, used when its language is unknown.</summary>
+    public string? SubtitleTrackName { get; set; }
+
+    public string? AudioLanguage { get; set; }
+    public string? AudioTrackName { get; set; }
+}
+
 public sealed class LibraryData
 {
     public bool Initialized { get; set; }
@@ -65,6 +81,16 @@ public sealed class LibraryData
     public double WindowHeight { get; set; }
     public bool WindowMaximized { get; set; }
     public SubtitleSettings Subtitles { get; set; } = new();
+
+    /// <summary>Per-folder presets, keyed by <see cref="LibraryStore.PresetKey"/>.</summary>
+    public Dictionary<string, FolderPreset> FolderPresets { get; set; } = new();
+
+    /// <summary>Preferred languages ("ro, en") for folders without a preset; empty leaves libVLC's choice.</summary>
+    public string SubtitleLanguages { get; set; } = "";
+    public string AudioLanguages { get; set; } = "";
+
+    /// <summary>libVLC audio output device id; null or empty for the system default.</summary>
+    public string? AudioDevice { get; set; }
 }
 
 /// <summary>Library, playlists and history, persisted as JSON in %APPDATA%\HardHatMediaPlayer.</summary>
@@ -178,6 +204,21 @@ public sealed class LibraryStore
         Data.FolderVisits.TryGetValue(dir, out var n);
         Data.FolderVisits[dir] = n + 1;
     }
+
+    public static string PresetKey(string folder) =>
+        System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(folder)).ToLowerInvariant();
+
+    public FolderPreset? PresetFor(string folder) =>
+        Data.FolderPresets.TryGetValue(PresetKey(folder), out var p) ? p : null;
+
+    public FolderPreset EnsurePreset(string folder)
+    {
+        var key = PresetKey(folder);
+        if (!Data.FolderPresets.TryGetValue(key, out var p)) Data.FolderPresets[key] = p = new FolderPreset();
+        return p;
+    }
+
+    public void ForgetPreset(string folder) => Data.FolderPresets.Remove(PresetKey(folder));
 
     public AudioMeta? MetaFor(string path) => Data.Meta.TryGetValue(path, out var m) ? m : null;
 

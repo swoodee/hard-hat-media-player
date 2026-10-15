@@ -445,8 +445,11 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <Button Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Click="OnTracksMenu" ToolTip="Subtitles, audio and speed">
+                                    <Button x:Name="SubtitlesButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Click="OnSubtitlesMenu" ToolTip="Subtitles (V, G / H delay)">
                                         <ctl:Icon Data="{StaticResource I.Subtitles}" StrokeThickness="1.8"/>
+                                    </Button>
+                                    <Button x:Name="AudioButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Click="OnAudioMenu" ToolTip="Audio (B, J / K delay)">
+                                        <ctl:Icon Data="{StaticResource I.Audio}" StrokeThickness="1.8"/>
                                     </Button>
                                     <Button x:Name="MuteButton" Style="{StaticResource IconButton}" Width="32" Height="32" Padding="7" Command="{Binding Player.ToggleMuteCommand}" ToolTip="Mute (M)">
                                         <ctl:Icon x:Name="VolumeIcon" Data="{StaticResource I.Volume}" StrokeThickness="1.8"/>
