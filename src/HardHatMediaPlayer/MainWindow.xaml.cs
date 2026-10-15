@@ -432,10 +432,22 @@ public partial class MainWindow : Window, IUiServices
         if (_vm.Panel.Page.Menu is { } menu) MenuBuilder.Show(menu(), (UIElement)sender);
     }
 
-    private void OnTracksMenu(object sender, RoutedEventArgs e)
+    private void OnSubtitlesMenu(object sender, RoutedEventArgs e) =>
+        ShowPlayerMenu(_vm.SubtitlesMenu(), (UIElement)sender, _vm.Player.HasMedia
+            ? new DelayRow(_vm.Player, "Subtitle delay", nameof(PlayerViewModel.SubtitleDelayMs), nameof(PlayerViewModel.SubtitleDelayText),
+                PlayerViewModel.MaxDelayMs, PlayerViewModel.DelayStepMs, "G earlier · H later · remembered for this folder")
+            : null);
+
+    private void OnAudioMenu(object sender, RoutedEventArgs e) =>
+        ShowPlayerMenu(_vm.AudioMenu(), (UIElement)sender, _vm.Player.HasMedia
+            ? new DelayRow(_vm.Player, "Audio delay", nameof(PlayerViewModel.AudioDelayMs), nameof(PlayerViewModel.AudioDelayText),
+                PlayerViewModel.MaxDelayMs, PlayerViewModel.DelayStepMs, "J earlier · K later · remembered for this folder")
+            : null);
+
+    private void ShowPlayerMenu(System.Collections.Generic.IReadOnlyList<MenuAction> items, UIElement button, UIElement? footer)
     {
         _hideControls.Stop();
-        _openMenu = MenuBuilder.Show(_vm.TracksMenu(), (UIElement)sender, PlacementMode.Top);
+        _openMenu = MenuBuilder.Show(items, button, PlacementMode.Top, footer);
         _openMenu.Closed += (_, _) => ShowControls();
     }
 
@@ -448,7 +460,7 @@ public partial class MainWindow : Window, IUiServices
         VolumeBar.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         // Compact: transport on the left, the rest on the right, instead of centring and overlapping.
         ControlsLeftCol.Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        // Very narrow: shuffle and repeat stay reachable from the tracks/playback menu.
+        // Very narrow: shuffle and repeat stay reachable from the main menu's Playback submenu.
         var tiny = width < 470;
         ShuffleButton.Visibility = tiny ? Visibility.Collapsed : Visibility.Visible;
         RepeatButton.Visibility = tiny ? Visibility.Collapsed : Visibility.Visible;
@@ -571,6 +583,10 @@ public partial class MainWindow : Window, IUiServices
                 case Key.V: p.CycleSubtitles(); break;
                 case Key.B: p.CycleAudioTracks(); break;
                 case Key.Q: _vm.IsQueueOpen = !_vm.IsQueueOpen; break;
+                case Key.G: p.NudgeSubtitleDelay(-PlayerViewModel.DelayStepMs); break;
+                case Key.H: p.NudgeSubtitleDelay(PlayerViewModel.DelayStepMs); break;
+                case Key.J: p.NudgeAudioDelay(-PlayerViewModel.DelayStepMs); break;
+                case Key.K: p.NudgeAudioDelay(PlayerViewModel.DelayStepMs); break;
                 default: handled = false; break;
             }
         }
@@ -795,6 +811,8 @@ public partial class MainWindow : Window, IUiServices
         new("=", "Normal speed"),
         new("V", "Next subtitle track"),
         new("B", "Next audio track"),
+        new("G  /  H", "Subtitle delay −50 / +50 ms"),
+        new("J  /  K", "Audio delay −50 / +50 ms"),
         new("Ctrl + O", "Open file"),
         new("Ctrl + Shift + O", "Open folder"),
         new("Ctrl + N", "Open network stream"),

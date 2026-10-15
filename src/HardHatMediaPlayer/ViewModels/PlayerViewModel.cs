@@ -53,6 +53,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isEnded;
     [ObservableProperty] private MediaKind _kind;
 
+    /// <summary>Positive: subtitles appear later. Applied to libVLC in microseconds.</summary>
+    [ObservableProperty] private long _subtitleDelayMs;
+    [ObservableProperty] private long _audioDelayMs;
+
     public Func<PanelPage>? SourcePage { get; private set; }
     public bool IsSeeking { get; set; }
 
@@ -93,6 +97,11 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.EndReached += (_, _) => _ui.BeginInvoke(OnEnded);
         Player.EncounteredError += (_, _) => _ui.BeginInvoke(OnError);
         Player.Vout += (_, e) => _ui.BeginInvoke(() => HasVideo = e.Count > 0);
+        // Tracks keep arriving after playback starts (embedded ones, then "video.lang.srt" next to it).
+        Player.ESAdded += (_, e) =>
+        {
+            if (e.Type is TrackType.Audio or TrackType.Text) _ui.BeginInvoke(ApplyTrackPreferences);
+        };
 
         _volume = Math.Clamp(store.Data.Volume, 0, 125);
 
@@ -139,6 +148,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         if (!_startedRaised && CurrentPath != null)
         {
             _startedRaised = true;
+            ApplyPreset();
             MediaStarted?.Invoke(CurrentPath);
         }
     }
@@ -230,7 +240,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         var tracks = SubtitleTracks.ToList();
         if (tracks.Count == 0)
         {
-            ShowOsd("No subtitles", "Find some: \u2026 menu \u2192 Find subtitles online", "Subtitles");
+            ShowOsd("No subtitles", "Find some: subtitles button \u2192 Find subtitles online", "Subtitles");
             return;
         }
         var i = tracks.FindIndex(t => t.Id == SubtitleTrack);
@@ -242,7 +252,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         var tracks = AudioTracks.Where(t => t.Id != -1).ToList();
         if (tracks.Count < 2)
         {
-            ShowOsd(tracks.Count == 1 ? $"Audio: {tracks[0].Name}" : "No audio tracks", "Only one track", "Volume");
+            ShowOsd(tracks.Count == 1 ? $"Audio: {tracks[0].Name}" : "No audio tracks", "Only one track", "Audio");
             return;
         }
         var i = tracks.FindIndex(t => t.Id == AudioTrack);
@@ -423,6 +433,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Error = null;
         IsEnded = false;
         _startedRaised = false;
+        _tracksSettleBy = DateTime.MaxValue;
+        _tracksChosenByUser = false;
+        _presetAnnounced = false;
+        SetDelaysQuietly(0, 0);
         Kind = kind;
         HasVideo = false;
         Position = 0;
@@ -631,18 +645,207 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public int AudioTrack => Player.AudioTrack;
     public int SubtitleTrack => Player.Spu;
 
+    /// <summary>The user picked an audio track: switch to it and remember its language for this folder.</summary>
     public void SetAudioTrack(int id)
     {
         Player.SetAudioTrack(id);
+        _tracksChosenByUser = true;
         var name = AudioTracks.FirstOrDefault(t => t.Id == id).Name;
-        ShowOsd(id == -1 ? "Audio off" : $"Audio: {name}", "B to switch", "Volume");
+        if (id != -1)
+            Remember(p =>
+            {
+                p.AudioLanguage = LanguageOf(TrackType.Audio, id, name);
+                p.AudioTrackName = name;
+            });
+        ShowOsd(id == -1 ? "Audio off" : $"Audio: {name}", "B to switch", "Audio");
     }
 
+    /// <summary>The user picked a subtitle track (or off): switch and remember it for this folder.</summary>
     public void SetSubtitleTrack(int id)
     {
         Player.SetSpu(id);
+        _tracksChosenByUser = true;
         var name = SubtitleTracks.FirstOrDefault(t => t.Id == id).Name;
+        Remember(p =>
+        {
+            p.SubtitleLanguage = id == -1 ? Off : LanguageOf(TrackType.Text, id, name);
+            p.SubtitleTrackName = id == -1 ? null : name;
+        });
         ShowOsd(id == -1 ? "Subtitles off" : $"Subtitles: {name}", "V to switch", "Subtitles");
+    }
+
+    public IReadOnlyList<(string Id, string Name)> AudioDevices =>
+        Player.AudioOutputDeviceEnum.Select(d => (d.DeviceIdentifier ?? "", d.Description ?? d.DeviceIdentifier ?? "Device")).ToList();
+
+    public string? AudioDevice => Player.OutputDevice;
+
+    public void SetAudioDevice(string id, string name)
+    {
+        Player.SetOutputDevice(id);
+        _store.Data.AudioDevice = id;
+        ShowOsd($"Audio output: {name}", null, "Audio");
+    }
+
+    // ---- Subtitle and audio delay ----
+
+    public const long MaxDelayMs = 5000;
+    public const long DelayStepMs = 50;
+    private bool _quietDelay;
+
+    public string SubtitleDelayText => FormatDelay(SubtitleDelayMs);
+    public string AudioDelayText => FormatDelay(AudioDelayMs);
+
+    public static string FormatDelay(long ms) =>
+        ms == 0 ? "0 ms" : Math.Abs(ms) >= 1000
+            ? FormattableString.Invariant($"{(ms < 0 ? "−" : "+")}{Math.Abs(ms) / 1000.0:0.00} s")
+            : $"{(ms < 0 ? "−" : "+")}{Math.Abs(ms)} ms";
+
+    public void NudgeSubtitleDelay(long ms) { if (HasMedia) SubtitleDelayMs += ms; }
+    public void NudgeAudioDelay(long ms) { if (HasMedia) AudioDelayMs += ms; }
+
+    partial void OnSubtitleDelayMsChanged(long value)
+    {
+        var clamped = Math.Clamp(value, -MaxDelayMs, MaxDelayMs);
+        if (clamped != value) { SubtitleDelayMs = clamped; return; }
+        Player.SetSpuDelay(value * 1000);
+        OnPropertyChanged(nameof(SubtitleDelayText));
+        if (_quietDelay) return;
+        Remember(p => p.SubtitleDelayMs = value);
+        ShowOsd($"Subtitle delay {SubtitleDelayText}", "G earlier  ·  H later", "Subtitles", (value + MaxDelayMs) / (2.0 * MaxDelayMs));
+    }
+
+    partial void OnAudioDelayMsChanged(long value)
+    {
+        var clamped = Math.Clamp(value, -MaxDelayMs, MaxDelayMs);
+        if (clamped != value) { AudioDelayMs = clamped; return; }
+        Player.SetAudioDelay(value * 1000);
+        OnPropertyChanged(nameof(AudioDelayText));
+        if (_quietDelay) return;
+        Remember(p => p.AudioDelayMs = value);
+        ShowOsd($"Audio delay {AudioDelayText}", "J earlier  ·  K later", "Audio", (value + MaxDelayMs) / (2.0 * MaxDelayMs));
+    }
+
+    private void SetDelaysQuietly(long subtitleMs, long audioMs)
+    {
+        _quietDelay = true;
+        try
+        {
+            SubtitleDelayMs = subtitleMs;
+            AudioDelayMs = audioMs;
+            // Set again even when unchanged: libVLC starts every item at 0.
+            Player.SetSpuDelay(subtitleMs * 1000);
+            Player.SetAudioDelay(audioMs * 1000);
+        }
+        finally { _quietDelay = false; }
+    }
+
+    // ---- Per-folder presets ----
+
+    public const string Off = "off";
+    private DateTime _tracksSettleBy;
+    private bool _tracksChosenByUser;
+    private bool _presetAnnounced;
+
+    /// <summary>The folder whose preset applies to what's playing; null for streams.</summary>
+    public string? PresetFolder => Kind != MediaKind.Stream && CurrentPath is { } p && Path.IsPathRooted(p) ? Path.GetDirectoryName(p) : null;
+
+    public FolderPreset? CurrentPreset => PresetFolder is { } dir ? _store.PresetFor(dir) : null;
+
+    public void ForgetPreset()
+    {
+        if (PresetFolder is not { } dir) return;
+        _store.ForgetPreset(dir);
+        _store.Save();
+        ShowOsd("Forgot this folder's subtitle and audio settings", null, "Subtitles");
+    }
+
+    private void Remember(Action<FolderPreset> change)
+    {
+        if (PresetFolder is not { } dir) return;
+        var preset = _store.EnsurePreset(dir);
+        // A new preset starts from what's on screen now, so one change doesn't drop the others.
+        if (preset.SubtitleLanguage is null && preset.SubtitleTrackName is null && preset.AudioLanguage is null && preset.AudioTrackName is null
+            && preset.SubtitleDelayMs == 0 && preset.AudioDelayMs == 0)
+        {
+            preset.SubtitleDelayMs = SubtitleDelayMs;
+            preset.AudioDelayMs = AudioDelayMs;
+        }
+        change(preset);
+    }
+
+    /// <summary>Called once the item plays: delays from the folder's preset, then its tracks.</summary>
+    private void ApplyPreset()
+    {
+        var preset = CurrentPreset;
+        SetDelaysQuietly(preset?.SubtitleDelayMs ?? 0, preset?.AudioDelayMs ?? 0);
+        if (_store.Data.AudioDevice is { Length: > 0 } device) Player.SetOutputDevice(device);
+        _tracksSettleBy = DateTime.Now.AddSeconds(8);
+        ApplyTrackPreferences();
+    }
+
+    /// <summary>Picks subtitle and audio tracks by language: the folder's choice first, then the default languages.</summary>
+    private void ApplyTrackPreferences()
+    {
+        if (!HasMedia || _tracksChosenByUser || DateTime.Now > _tracksSettleBy) return;
+        var preset = CurrentPreset;
+        var announce = new List<string>();
+
+        if (preset?.SubtitleLanguage == Off)
+        {
+            if (Player.Spu != -1)
+            {
+                Player.SetSpu(-1);
+                announce.Add("Subtitles off");
+            }
+        }
+        else
+        {
+            var langs = Languages.ParseList(_store.Data.SubtitleLanguages);
+            if (preset?.SubtitleLanguage is { } lang) langs.Insert(0, lang);
+            var pick = PickTrack(TrackType.Text, SubtitleTracks, langs, preset?.SubtitleTrackName);
+            if (pick is { } s && s.Id != Player.Spu)
+            {
+                Player.SetSpu(s.Id);
+                announce.Add($"Subtitles: {s.Name}");
+            }
+        }
+
+        var audioLangs = Languages.ParseList(_store.Data.AudioLanguages);
+        if (preset?.AudioLanguage is { } alang) audioLangs.Insert(0, alang);
+        var audio = PickTrack(TrackType.Audio, AudioTracks.Where(t => t.Id != -1).ToList(), audioLangs, preset?.AudioTrackName);
+        if (audio is { } a && a.Id != Player.AudioTrack)
+        {
+            Player.SetAudioTrack(a.Id);
+            announce.Add($"Audio: {a.Name}");
+        }
+
+        if (announce.Count > 0 && !_presetAnnounced)
+        {
+            _presetAnnounced = true;
+            ShowOsd(string.Join("  ·  ", announce), preset != null ? "Remembered for this folder" : "Your default languages", "Subtitles");
+        }
+    }
+
+    private (int Id, string Name)? PickTrack(TrackType type, IReadOnlyList<(int Id, string Name)> tracks, IList<string> langs, string? name)
+    {
+        var real = tracks.Where(t => t.Id != -1).ToList();
+        if (real.Count == 0) return null;
+        var withLang = real.Select(t => (Track: t, Lang: LanguageOf(type, t.Id, t.Name))).ToList();
+        foreach (var lang in langs)
+        {
+            var i = withLang.FindIndex(t => t.Lang == lang);
+            if (i >= 0) return withLang[i].Track;
+        }
+        var named = name is null ? -1 : real.FindIndex(t => t.Name == name);
+        return named >= 0 ? real[named] : null;
+    }
+
+    /// <summary>The track's two-letter language: from the container's tags, else from its name.</summary>
+    private string? LanguageOf(TrackType type, int id, string? name)
+    {
+        using var media = Player.Media;
+        var tagged = media?.Tracks.FirstOrDefault(t => t.Id == id && t.TrackType == type).Language;
+        return Languages.Normalize(tagged) ?? Languages.FromTrackName(name);
     }
 
     public void AddSubtitleFile(string file)
