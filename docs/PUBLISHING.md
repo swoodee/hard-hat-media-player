@@ -24,15 +24,30 @@ Git stamps every commit with an email address, and on GitHub that address become
    git config user.email "12345678+YOUR-USERNAME@users.noreply.github.com"
    ```
 
-4. The commits made so far carry your Gmail address. Rewrite them to use the private address
-   (safe now, because nothing has been published yet):
+4. Check that no commit still carries your personal email (only matters before the first push; this was
+   already done for the history up to October 2026):
 
    ```powershell
-   git rebase --root --exec "git commit --amend --no-edit --reset-author"
-   git log --format="%h %an <%ae>  %s"
+   git log --format="%h %an <%ae> / %cn <%ce>  %s"
    ```
 
-   Every line of the log should now show the noreply address.
+   If some lines show a personal address, rewrite them to the private one. Put your own addresses in
+   the first lines; the rest stays as it is:
+
+   ```powershell
+   $env:FILTER_BRANCH_SQUELCH_WARNING = 1
+   $old = "personal.address@example.com"
+   $new = "12345678+YOUR-USERNAME@users.noreply.github.com"
+   git filter-branch --env-filter "if [ `"`$GIT_AUTHOR_EMAIL`" = '$old' ]; then export GIT_AUTHOR_NAME='YOUR-USERNAME' GIT_AUTHOR_EMAIL='$new'; fi; if [ `"`$GIT_COMMITTER_EMAIL`" = '$old' ]; then export GIT_COMMITTER_NAME='YOUR-USERNAME' GIT_COMMITTER_EMAIL='$new'; fi" -- master
+   ```
+
+   Use this, not `git rebase --root`: the history contains a merge, and a rebase replays it and stops on
+   a conflict. `filter-branch` only changes the names and emails; the files stay exactly the same.
+   It keeps a backup of the old history; once the log looks right, remove it:
+
+   ```powershell
+   git update-ref -d refs/original/refs/heads/master
+   ```
 
 ## 3. Name the main branch `main`
 
