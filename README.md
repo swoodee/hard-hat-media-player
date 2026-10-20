@@ -26,9 +26,17 @@ A free, open-source media player for Windows, with a clean modern interface and 
 
 ## Download and run
 
-Releases will be published on the [Releases page](../../releases). Until then, build it yourself:
+Get the latest version from the [Releases page](../../releases):
 
-1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (or newer) on Windows 10/11.
+- **`HardHatMediaPlayer-<version>-setup-win-x64.exe`**: the installer (Start menu shortcut, uninstaller, no admin
+  rights needed).
+- `HardHatMediaPlayer-<version>-portable-win-x64.zip`: unzip anywhere and run `HardHatMediaPlayer.exe`.
+
+Windows 10 or 11, 64-bit; .NET and libVLC are included.
+
+### Build from source
+
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Windows 10/11.
 2. Clone the repository and run:
 
    ```bash
@@ -104,7 +112,8 @@ src/HardHatMediaPlayer/
   Services/              JSON store, folder scanning, tag reading, OpenSubtitles client
   Views/                 dialogs (prompt/confirm, subtitle search)
 scripts/make-icon.ps1    renders Assets/app.ico from Themes/AppMark.xaml
-scripts/package-site.ps1 packages site/ (the website) for upload to the web server
+scripts/build-release.ps1 builds the installer and portable zip into artifacts/
+installer/               Inno Setup script for the Windows installer
 ```
 
 ## Credits and licenses

@@ -94,25 +94,33 @@ And **Settings → Branches → Add branch ruleset** (or **Add rule**) for `main
 
 This way every contribution is built automatically before it can be merged.
 
-## 7. Publish a first release (a download people can run)
+## 7. Publish a release (installer + portable zip)
 
-Build a ready-to-run folder. It includes .NET, so users don't need to install anything, and only the
-64-bit libVLC:
+Releases are built by GitHub: pushing a version tag runs `.github/workflows/release.yml`, which builds the
+installer and the portable zip with `scripts/build-release.ps1` and publishes a release with both attached.
+The notes come from `.github/release-notes.md`.
+
+1. Set `<Version>` in `src/HardHatMediaPlayer/HardHatMediaPlayer.csproj` (for example `0.2.0`), commit and push.
+2. Tag that commit and push the tag:
+
+   ```powershell
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. Watch **Actions → Release**; after a few minutes the release appears under **Releases**.
+
+The "Source code" archives GitHub adds to every release leave out `site/`, `docs/` and the website script
+(see `.gitattributes`), so they contain only the app.
+
+To build the same files on your PC first (needs [Inno Setup](https://jrsoftware.org/isinfo.php)):
 
 ```powershell
-dotnet publish src/HardHatMediaPlayer -c Release -r win-x64 --self-contained true -o publish/HardHatMediaPlayer
-Copy-Item LICENSE, THIRD-PARTY-NOTICES.md publish/HardHatMediaPlayer
-Compress-Archive publish/HardHatMediaPlayer HardHatMediaPlayer-0.1.0-win-x64.zip
+powershell -ExecutionPolicy Bypass -File scriptsuild-release.ps1
 ```
 
-On GitHub: **Releases → Draft a new release**
-
-- **Tag:** `v0.1.0` (create new tag on `main`)
-- **Title:** `Hard Hat Media Player 0.1.0`
-- Describe what's in it, attach `HardHatMediaPlayer-0.1.0-win-x64.zip`, then **Publish release**.
-
-The zip isn't digitally signed, so Windows SmartScreen may warn people on first run ("More info → Run
-anyway"). Code signing can come later.
+They land in `artifacts\`. The installer isn't code-signed, so Windows SmartScreen may warn people on first run
+("More info → Run anyway"). Code signing can come later.
 
 ## 8. Put the website on hardhatmediaplayer.com (home server)
 

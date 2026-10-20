@@ -9,3 +9,9 @@
 
 *.ico     binary
 *.png     binary
+
+# Keep the website and the maintainer's publishing tools out of the "Source code" archives on GitHub releases.
+site/                    export-ignore
+docs/                    export-ignore
+scripts/package-site.ps1 export-ignore
+.gitattributes           export-ignore
