@@ -99,125 +99,152 @@ On GitHub: **Releases → Draft a new release**
 The zip isn't digitally signed, so Windows SmartScreen may warn people on first run ("More info → Run
 anyway"). Code signing can come later.
 
-## 8. Put the website on hardhatmediaplayer.com (your own server)
+## 8. Put the website on hardhatmediaplayer.com (home server)
 
 The website is the `site/` folder: plain HTML, CSS and an SVG icon, with no build step, no database and no PHP.
-Any web server can host it. You publish it by hand: change the files, package them, upload them.
+It runs on the home Proxmox server in its own small container with nginx, and reaches the internet through
+a **Cloudflare Tunnel**: no ports are opened on the router, and Cloudflare provides HTTPS. You publish it by
+hand: change the files, package them, upload them.
+
+```
+visitor ──HTTPS──> Cloudflare ──tunnel──> cloudflared (already running) ──HTTP──> "web" container: nginx :80
+```
 
 **First**, replace every `YOUR-USERNAME` in `site/index.html` with your GitHub username. To preview the site,
 open `site/index.html` in a browser.
 
-### a. Find out what kind of server you have
+The placeholders below: `WEB-IP` is the address you give the new container, `ROUTER-IP` your router (the
+gateway the other containers use).
 
-Look in the welcome email or the account page of the company you rent the server from:
+### a. Move the domain's DNS to Cloudflare (once)
 
-- **Hosting with a control panel** (cPanel, Plesk, DirectAdmin, or your host's own panel): you log in to a
-  website and see a **File Manager**. Follow **b1**.
-- **A VPS or dedicated server** (Linux, you log in with `ssh`): follow **b2**.
+A tunnel can only publish a domain whose DNS Cloudflare manages.
 
-If you aren't sure, ask the hosting company's support: "Is this shared hosting with a control panel, or a VPS
-with SSH access? What is the server's IP address?"
+1. In the Cloudflare dashboard: **Add a domain**, enter `hardhatmediaplayer.com`, choose the **Free** plan.
+2. Cloudflare shows two nameservers (like `xxx.ns.cloudflare.com`). At the company where you bought the domain,
+   replace its nameservers with those two.
+3. Wait until Cloudflare shows the domain as **Active** (minutes to a few hours; it emails you).
+4. **SSL/TLS → Edge Certificates:** turn on **Always Use HTTPS**.
 
-### b1. Hosting with a control panel
+### b. Create the "web" container in Proxmox
 
-1. Package the site from the repository folder:
+Use a separate container, not the one with the AI services, so the public website can't reach them.
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\package-site.ps1
-   ```
-
-   This creates `dist\hardhatmediaplayer-site.zip`.
-2. In the panel, add `hardhatmediaplayer.com` as a domain (cPanel: **Domains → Create a new domain**; often
-   already there if you bought the domain from the same company). Note its **document root**, usually
-   `public_html` or `public_html/hardhatmediaplayer.com`.
-3. Open **File Manager**, go to that folder, delete the placeholder `index.html` the host put there (if any),
-   **Upload** the zip, then right-click it → **Extract**, and delete the zip.
-   `index.html` must end up directly in the document root, not inside a subfolder.
-4. HTTPS: in cPanel, **SSL/TLS Status → Run AutoSSL**; in Plesk, **SSL/TLS Certificates → Let's Encrypt**.
-   Most hosts do this automatically once the domain points to them (step c).
-
-### b2. A Linux VPS (Ubuntu or Debian)
-
-Replace `USER` with your login and `SERVER-IP` with the server's IP address.
-
-1. Install a web server once. **Caddy** is the simplest because it gets and renews the HTTPS certificate on its
-   own (install steps: caddyserver.com/docs/install). Then create the site folder:
-
-   ```bash
-   sudo mkdir -p /var/www/hardhatmediaplayer
-   sudo chown USER /var/www/hardhatmediaplayer
-   ```
-
-2. Put this in `/etc/caddy/Caddyfile` and run `sudo systemctl reload caddy`:
-
-   ```
-   hardhatmediaplayer.com {
-       root * /var/www/hardhatmediaplayer
-       file_server
-       encode gzip
-   }
-
-   www.hardhatmediaplayer.com {
-       redir https://hardhatmediaplayer.com{uri} permanent
-   }
-   ```
-
-   Already using **nginx**? Add a server block instead, then get the certificate with
-   `sudo certbot --nginx -d hardhatmediaplayer.com -d www.hardhatmediaplayer.com`:
-
-   ```nginx
-   server {
-       listen 80;
-       server_name hardhatmediaplayer.com www.hardhatmediaplayer.com;
-       root /var/www/hardhatmediaplayer;
-       index index.html;
-   }
-   ```
-
-3. Upload the site from the repository folder on your PC (Windows 10/11 include `scp`):
+1. On your PC, make an SSH key if you don't have one (press Enter at the questions):
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\package-site.ps1
-   scp -r dist\site\* USER@SERVER-IP:/var/www/hardhatmediaplayer/
+   ssh-keygen -t ed25519
+   Get-Content $HOME\.ssh\id_ed25519.pub
    ```
 
-The firewall must allow ports 80 and 443 (`sudo ufw allow 80,443/tcp` if you use ufw).
+2. In the Proxmox web interface: **local → CT Templates → Templates**, download **debian-12-standard**.
+3. **Create CT**:
+   - **General:** hostname `web`, **Unprivileged container** ticked, a root password, and paste the `.pub` line
+     from step 1 under **SSH public key**.
+   - **Template:** the Debian 12 template. **Disks:** 4 GB. **CPU:** 1 core. **Memory:** 512 MB, swap 512 MB.
+   - **Network:** IPv4 **Static**, `WEB-IP/24` (a free address on your network), gateway `ROUTER-IP`.
+     A fixed address matters: the tunnel points to it.
+   - **Confirm:** tick **Start after created**.
+4. In the container's **Options**, set **Start at boot** to Yes.
 
-### c. Point the domain at your server
+### c. Install nginx in the container
 
-At the company where you bought the domain, open the DNS settings for `hardhatmediaplayer.com`. If the domain
-and the hosting are at the same company, this is often already done; check with the commands below first.
-Otherwise **delete** any default `@` and `www` records (parking page, URL forwarding) and add:
+In the container's **Console** in Proxmox (or `ssh root@WEB-IP`):
 
-| Type  | Name / Host | Value |
-| ----- | ----------- | ----- |
-| A     | `@`   | your server's IPv4 address |
-| AAAA  | `@`   | your server's IPv6 address (only if it has one) |
-| CNAME | `www` | `hardhatmediaplayer.com` |
-
-If your host gave you **nameservers** (like `ns1.yourhost.com`) instead of an IP, put those under
-**Nameservers** at the registrar instead, and the host manages the records.
-
-Check (changes can take up to 24 hours to spread):
-
-```powershell
-Resolve-DnsName hardhatmediaplayer.com -Type A
-Resolve-DnsName www.hardhatmediaplayer.com
+```bash
+apt update && apt full-upgrade -y
+apt install -y nginx unattended-upgrades
+mkdir -p /var/www/hardhatmediaplayer
+rm /etc/nginx/sites-enabled/default
+nano /etc/nginx/sites-available/hardhatmediaplayer
 ```
 
-When the address is your server's, open <https://hardhatmediaplayer.com> and check the padlock.
+Paste this, save with Ctrl+O, Enter, Ctrl+X:
+
+```nginx
+server {
+    listen 80 default_server;
+    server_name hardhatmediaplayer.com;
+    root /var/www/hardhatmediaplayer;
+    index index.html;
+    server_tokens off;
+    location / { try_files $uri $uri/ =404; }
+}
+
+server {
+    listen 80;
+    server_name www.hardhatmediaplayer.com;
+    return 301 https://hardhatmediaplayer.com$request_uri;
+}
+```
+
+Turn it on:
+
+```bash
+ln -s /etc/nginx/sites-available/hardhatmediaplayer /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+```
+
+`unattended-upgrades` installs Debian's security updates automatically.
+
+### d. Upload the site
+
+From the repository folder on your PC (Windows 10/11 include `scp`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package-site.ps1
+scp -r dist\site\* root@WEB-IP:/var/www/hardhatmediaplayer/
+```
+
+Check it on your home network: open `http://WEB-IP` in a browser.
+
+### e. Publish it through the tunnel
+
+Add two public hostnames to the tunnel that already runs on the server.
+
+**If the tunnel is managed in the dashboard** (it was installed with `cloudflared service install <token>`):
+Cloudflare **Zero Trust → Networks → Tunnels →** your tunnel **→ Edit → Public Hostname → Add a public hostname**:
+
+| Subdomain | Domain | Service type | URL |
+| --------- | ------ | ------------ | --- |
+| *(empty)* | `hardhatmediaplayer.com` | HTTP | `WEB-IP:80` |
+| `www`     | `hardhatmediaplayer.com` | HTTP | `WEB-IP:80` |
+
+Cloudflare creates the DNS records itself.
+
+**If the tunnel uses a config file** (`/etc/cloudflared/config.yml` with `ingress:` rules), add these two rules
+above the final `- service: http_status:404` line:
+
+```yaml
+  - hostname: hardhatmediaplayer.com
+    service: http://WEB-IP:80
+  - hostname: www.hardhatmediaplayer.com
+    service: http://WEB-IP:80
+```
+
+then run, in the container with the tunnel:
+
+```bash
+cloudflared tunnel route dns <TUNNEL-NAME> hardhatmediaplayer.com
+cloudflared tunnel route dns <TUNNEL-NAME> www.hardhatmediaplayer.com
+systemctl restart cloudflared
+```
+
+Open <https://hardhatmediaplayer.com> and check the padlock; `www.` should redirect to it.
 
 ### Changing the site later
 
 1. Edit the files in `site/` and commit (the repository stays the source of the site).
-2. Run `scripts\package-site.ps1` again.
-3. Upload as in b1 (extract the new zip over the old files) or b2 (the same `scp` command).
+2. Run `scripts\package-site.ps1` and the same `scp` command as in d.
+3. Cloudflare caches the CSS and icon for a while; if a change doesn't show, use **Caching → Configuration →
+   Purge Everything**.
 
 To add the real screenshot, save it as `site/screenshot.png` and replace the placeholder `<div>` in
 `index.html` as its comment describes.
 
 Downloads of the app itself stay on **GitHub Releases** (step 7); the site only links to them, so the ~260 MB
-files never use your server's traffic.
+files never go through your home connection. If the server is off, the site is down too: Cloudflare shows an
+error page until it is back.
 
 ## 9. Day to day
 

@@ -1,5 +1,5 @@
-# Packages the website in site/ for upload to your own server (docs/PUBLISHING.md, step 8).
-# Creates dist/site (for scp) and dist/hardhatmediaplayer-site.zip (for a control panel's File Manager).
+# Packages the website in site/ for upload to the web server (docs/PUBLISHING.md, step 8).
+# Creates dist/site (for scp) and dist/hardhatmediaplayer-site.zip.
 param(
     [string]$Site = (Join-Path $PSScriptRoot '..\site'),
     [string]$Out = (Join-Path $PSScriptRoot '..\dist')
