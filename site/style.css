@@ -85,36 +85,19 @@ h1 {
 .button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .note { margin: 14px 0 0; color: var(--muted); font-size: 14px; }
 
-/* Screenshot frame */
+/* Screenshot */
 .screenshot { padding-bottom: 72px; }
-.window {
+.shot { margin: 0; }
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
   border: 1px solid var(--divider);
   border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--chrome);
   box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
 }
-.window-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--text2);
-}
-.window-bar .mark { width: 16px; height: 16px; }
-.dots { margin-left: auto; display: flex; gap: 6px; }
-.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--content); }
-.window-body { aspect-ratio: 16 / 9; background: var(--panel); }
-.window-body img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.placeholder {
-  display: grid;
-  place-items: center;
-  margin: 0 8px 8px;
-  border-radius: 8px;
-  border: 1px dashed #363636;
-  color: var(--muted);
-}
+.shot figcaption { margin-top: 12px; text-align: center; font-size: 13px; color: var(--muted); }
+.shot figcaption a { color: inherit; }
 
 /* Features */
 .features { padding-bottom: 72px; }

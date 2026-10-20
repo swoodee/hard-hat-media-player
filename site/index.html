@@ -13,16 +13,12 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!--
-    Until the GitHub repository exists, links use YOUR-USERNAME as a placeholder.
-    Replace every "YOUR-USERNAME" in this file with the GitHub username that owns the repository.
-  -->
   <header class="topbar">
     <a class="brand" href="#top">
       <svg class="mark" viewBox="3.73 4.68 92.80 92.80" aria-hidden="true"><use href="#appmark"/></svg>
       <span>Hard Hat Media Player</span>
     </a>
-    <a class="topbar-link" href="https://github.com/YOUR-USERNAME/hard-hat-media-player">GitHub</a>
+    <a class="topbar-link" href="https://github.com/swoodee/hard-hat-media-player">GitHub</a>
   </header>
 
   <main id="top">
@@ -44,28 +40,22 @@
       <p class="tagline">A free, open-source media player for Windows</p>
       <p class="lede">A clean, modern interface with playback powered by libVLC, the engine behind VLC.</p>
       <div class="actions">
-        <a class="button primary" href="https://github.com/YOUR-USERNAME/hard-hat-media-player/releases/latest">
+        <a class="button primary" href="https://github.com/swoodee/hard-hat-media-player/releases/latest">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
           Download for Windows
         </a>
-        <a class="button" href="https://github.com/YOUR-USERNAME/hard-hat-media-player">View on GitHub</a>
+        <a class="button" href="https://github.com/swoodee/hard-hat-media-player">View on GitHub</a>
       </div>
       <p class="note">Windows 10 and 11 · 64-bit · No installer, just unzip and run</p>
     </section>
 
     <section class="screenshot" aria-label="Screenshot">
-      <div class="window">
-        <div class="window-bar">
-          <svg class="mark" viewBox="3.73 4.68 92.80 92.80" aria-hidden="true"><use href="#appmark"/></svg>
-          <span>Hard Hat Media Player</span>
-          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        </div>
-        <!-- To add the real screenshot (16:9), replace this whole div with:
-             <div class="window-body"><img src="screenshot.png" alt="The Hard Hat Media Player library and player" width="1600" height="900"></div> -->
-        <div class="window-body placeholder">
-          <span>Screenshot coming soon</span>
-        </div>
-      </div>
+      <figure class="shot">
+        <img src="screenshot.webp" srcset="screenshot-1000.webp 1000w, screenshot.webp 2000w" sizes="(max-width: 1040px) 100vw, 1008px"
+          alt="Hard Hat Media Player playing Big Buck Bunny, with the floating control bar at the bottom" width="2000" height="1156">
+        <figcaption>Shown: <a href="https://peach.blender.org/">Big Buck Bunny</a> © Blender Foundation,
+          <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</figcaption>
+      </figure>
     </section>
 
     <section class="features" aria-labelledby="features-title">
@@ -101,7 +91,7 @@
 
   <footer>
     <p>Hard Hat Media Player is free software, licensed under the
-      <a href="https://github.com/YOUR-USERNAME/hard-hat-media-player/blob/main/LICENSE">GNU General Public License v3.0 or later</a>.</p>
+      <a href="https://github.com/swoodee/hard-hat-media-player/blob/main/LICENSE">GNU General Public License v3.0 or later</a>.</p>
     <p>An independent project. It uses VideoLAN's libVLC library but is not made by, affiliated with, or endorsed by VideoLAN.
       “VLC” is a trademark of VideoLAN.</p>
     <p>Interface based on <a href="https://www.figma.com/community/file/1691465999134370980/vlc-redesign">“VLC Redesign”</a>
