@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hard Hat Media Player</title>
+  <meta name="description" content="A free, open-source media player for Windows, with a clean modern interface and playback powered by libVLC.">
+  <meta name="theme-color" content="#141414">
+  <meta property="og:title" content="Hard Hat Media Player">
+  <meta property="og:description" content="A free, open-source media player for Windows.">
+  <meta property="og:url" content="https://hardhatmediaplayer.com/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!--
+    Until the GitHub repository exists, links use YOUR-USERNAME as a placeholder.
+    Replace every "YOUR-USERNAME" in this file with the GitHub username that owns the repository.
+  -->
+  <header class="topbar">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="3.73 4.68 92.80 92.80" aria-hidden="true"><use href="#appmark"/></svg>
+      <span>Hard Hat Media Player</span>
+    </a>
+    <a class="topbar-link" href="https://github.com/YOUR-USERNAME/hard-hat-media-player">GitHub</a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <!-- The app mark: "Hard Hat" by sentya irma from Noun Project (CC BY 3.0), recoloured; credited in the footer.
+           Same paths and framing as src/HardHatMediaPlayer/Themes/AppMark.xaml. -->
+      <svg class="hero-mark" viewBox="3.73 4.68 92.80 92.80" role="img" aria-label="Hard Hat Media Player logo: an orange hard hat">
+        <defs>
+          <g id="appmark" fill="#FF8800">
+            <path d="m78.719 54.484c0.96875 0.93359 2.2617 0.015625 3.2188 0.79688 0.35938 0.29688 0.5625 0.73438 0.5625 1.1875v2.9531c0.79688-0.28125 1.5625-0.54688 2.1406-0.73438-0.625-19.234-7.1406-30.172-14.188-36.359 4.8594 9.8594 6.6562 23 7.2969 30.406 0.0625 0.70312 0.40625 1.3125 0.96875 1.75z"/>
+            <path d="m57.75 52.953c0.63672 5.8008-3.9648 10.555-9.6406 10.844v5.8281c22.188 1.2344 29.688-4.1719 31.266-5.5938v-5.9844c-2.5-0.35156-4.543-2.5195-4.7344-5.0469-0.8125-9.3125-4.6875-39.734-20.328-40.359-9.7031-0.375-14.797 0.70312-17.453 1.8281 15.949 2.4883 19.48 26.363 20.891 38.484z"/>
+            <path d="m93.078 69.766-5.5781-9.0312c-0.27734 0.35156-0.53906 0.51172-1 0.64062-0.59375 0.1875-2.4062 0.76562-4 1.375-0.046875 0.69531 0.19531 2.293-0.3125 2.8594-0.25 0.32812-5.8594 7.3281-27.828 7.3281-2.4375 0-5.0781-0.09375-7.9219-0.28125-0.60938-0.03125-1.1094-0.42188-1.3281-0.9375-13.328-0.29688-26.641-8.2812-31.875-11.797-1.8438-1.25-2.8906-3.3125-2.7969-5.5156 0.054688-0.91797 0.085938-1.7695 0.1875-2.7969 0 0-3.6406 3.875-3.6406 3.875-1.7031 1.8125-1.7656 4.6094-0.15625 6.5l4.8594 5.6562c1.2344 1.4375 2.9219 2.4531 4.75 2.8594l9.2812 2.0625 11.641 8.6406c10.25 7.6172 23.277 10.172 35.531 7.1562l14-3.4531c6.5234-1.3984 9.8594-9.5781 6.1875-15.141z"/>
+            <path d="m14.984 57.328c4.9688 3.3438 17.531 10.984 30 11.281v-6.1719c0-0.76562 0.5625-1.4219 1.3281-1.5469l2.7344-0.40625c3.5-0.51562 5.9531-3.6875 5.5938-7.2188-1.4219-11.727-4.8789-37.27-21.625-35.688-4.0625 1.5781-7.2812 4.1406-9.8281 7.2188 4.7031 2.1875 16.469 8.7969 20.297 21.766 0.58203 1.9648-2.3945 2.832-3 0.89062-3.5938-12.219-15.484-18.406-19.203-20.078-6.3281 9.5469-7.5 22.281-7.7188 27.156-0.046875 1.125 0.48438 2.1562 1.4219 2.7969z"/>
+          </g>
+        </defs>
+        <use href="#appmark"/>
+      </svg>
+      <h1>Hard Hat Media Player</h1>
+      <p class="tagline">A free, open-source media player for Windows</p>
+      <p class="lede">A clean, modern interface with playback powered by libVLC, the engine behind VLC.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/YOUR-USERNAME/hard-hat-media-player/releases/latest">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="button" href="https://github.com/YOUR-USERNAME/hard-hat-media-player">View on GitHub</a>
+      </div>
+      <p class="note">Windows 10 and 11 · 64-bit · No installer, just unzip and run</p>
+    </section>
+
+    <section class="screenshot" aria-label="Screenshot">
+      <div class="window">
+        <div class="window-bar">
+          <svg class="mark" viewBox="3.73 4.68 92.80 92.80" aria-hidden="true"><use href="#appmark"/></svg>
+          <span>Hard Hat Media Player</span>
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+        <!-- To add the real screenshot (16:9), replace this whole div with:
+             <div class="window-body"><img src="screenshot.png" alt="The Hard Hat Media Player library and player" width="1600" height="900"></div> -->
+        <div class="window-body placeholder">
+          <span>Screenshot coming soon</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" aria-labelledby="features-title">
+      <h2 id="features-title">Features</h2>
+      <ul>
+        <li>
+          <h3>Plays almost anything</h3>
+          <p>Everything libVLC plays: local files, folders and network streams (http, rtsp, udp…).</p>
+        </li>
+        <li>
+          <h3>A real library</h3>
+          <p>Continue Watching with resume points, episodes in order with autoplay, and music by song, album, artist and genre.</p>
+        </li>
+        <li>
+          <h3>A player that stays out of the way</h3>
+          <p>Auto-hiding controls, subtitle and audio tracks, speed, shuffle and repeat, and true fullscreen.</p>
+        </li>
+        <li>
+          <h3>Keyboard friendly</h3>
+          <p>On-screen feedback for every action with its shortcut, and a cheat sheet on <kbd>F1</kbd>.</p>
+        </li>
+        <li>
+          <h3>Online subtitles</h3>
+          <p>Search OpenSubtitles.com by file hash or name, and fetch exact matches automatically.</p>
+        </li>
+        <li>
+          <h3>Free and open source</h3>
+          <p>GPL-3.0 licensed, no ads, no tracking. Contributions are welcome.</p>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Hard Hat Media Player is free software, licensed under the
+      <a href="https://github.com/YOUR-USERNAME/hard-hat-media-player/blob/main/LICENSE">GNU General Public License v3.0 or later</a>.</p>
+    <p>An independent project. It uses VideoLAN's libVLC library but is not made by, affiliated with, or endorsed by VideoLAN.
+      “VLC” is a trademark of VideoLAN.</p>
+    <p>Interface based on <a href="https://www.figma.com/community/file/1691465999134370980/vlc-redesign">“VLC Redesign”</a>
+      by Juxtopposed, licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+    <p>App icon: <a href="https://thenounproject.com/icon/hard-hat-7630923/">“Hard Hat”</a> by sentya irma from Noun Project,
+      licensed under <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>; recoloured.</p>
+  </footer>
+</body>
+</html>

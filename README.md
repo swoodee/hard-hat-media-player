@@ -104,6 +104,7 @@ src/HardHatMediaPlayer/
   Services/              JSON store, folder scanning, tag reading, OpenSubtitles client
   Views/                 dialogs (prompt/confirm, subtitle search)
 scripts/make-icon.ps1    renders Assets/app.ico from Themes/AppMark.xaml
+scripts/package-site.ps1 packages site/ (the website) for upload to the web server
 ```
 
 ## Credits and licenses

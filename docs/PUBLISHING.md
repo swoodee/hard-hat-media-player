@@ -99,13 +99,125 @@ On GitHub: **Releases → Draft a new release**
 The zip isn't digitally signed, so Windows SmartScreen may warn people on first run ("More info → Run
 anyway"). Code signing can come later.
 
-## 8. Point hardhatmediaplayer.com at the project (optional)
+## 8. Put the website on hardhatmediaplayer.com (your own server)
 
-The simplest option is to make the domain redirect to the GitHub repository in your domain registrar's
-settings (**URL forwarding** to `https://github.com/YOUR-USERNAME/hard-hat-media-player`).
+The website is the `site/` folder: plain HTML, CSS and an SVG icon, with no build step, no database and no PHP.
+Any web server can host it. You publish it by hand: change the files, package them, upload them.
 
-For a real website later, GitHub Pages can host it for free with your domain. Its documentation, *Managing a
-custom domain for your GitHub Pages site*, lists the DNS records to add at your registrar.
+**First**, replace every `YOUR-USERNAME` in `site/index.html` with your GitHub username. To preview the site,
+open `site/index.html` in a browser.
+
+### a. Find out what kind of server you have
+
+Look in the welcome email or the account page of the company you rent the server from:
+
+- **Hosting with a control panel** (cPanel, Plesk, DirectAdmin, or your host's own panel): you log in to a
+  website and see a **File Manager**. Follow **b1**.
+- **A VPS or dedicated server** (Linux, you log in with `ssh`): follow **b2**.
+
+If you aren't sure, ask the hosting company's support: "Is this shared hosting with a control panel, or a VPS
+with SSH access? What is the server's IP address?"
+
+### b1. Hosting with a control panel
+
+1. Package the site from the repository folder:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\package-site.ps1
+   ```
+
+   This creates `dist\hardhatmediaplayer-site.zip`.
+2. In the panel, add `hardhatmediaplayer.com` as a domain (cPanel: **Domains → Create a new domain**; often
+   already there if you bought the domain from the same company). Note its **document root**, usually
+   `public_html` or `public_html/hardhatmediaplayer.com`.
+3. Open **File Manager**, go to that folder, delete the placeholder `index.html` the host put there (if any),
+   **Upload** the zip, then right-click it → **Extract**, and delete the zip.
+   `index.html` must end up directly in the document root, not inside a subfolder.
+4. HTTPS: in cPanel, **SSL/TLS Status → Run AutoSSL**; in Plesk, **SSL/TLS Certificates → Let's Encrypt**.
+   Most hosts do this automatically once the domain points to them (step c).
+
+### b2. A Linux VPS (Ubuntu or Debian)
+
+Replace `USER` with your login and `SERVER-IP` with the server's IP address.
+
+1. Install a web server once. **Caddy** is the simplest because it gets and renews the HTTPS certificate on its
+   own (install steps: caddyserver.com/docs/install). Then create the site folder:
+
+   ```bash
+   sudo mkdir -p /var/www/hardhatmediaplayer
+   sudo chown USER /var/www/hardhatmediaplayer
+   ```
+
+2. Put this in `/etc/caddy/Caddyfile` and run `sudo systemctl reload caddy`:
+
+   ```
+   hardhatmediaplayer.com {
+       root * /var/www/hardhatmediaplayer
+       file_server
+       encode gzip
+   }
+
+   www.hardhatmediaplayer.com {
+       redir https://hardhatmediaplayer.com{uri} permanent
+   }
+   ```
+
+   Already using **nginx**? Add a server block instead, then get the certificate with
+   `sudo certbot --nginx -d hardhatmediaplayer.com -d www.hardhatmediaplayer.com`:
+
+   ```nginx
+   server {
+       listen 80;
+       server_name hardhatmediaplayer.com www.hardhatmediaplayer.com;
+       root /var/www/hardhatmediaplayer;
+       index index.html;
+   }
+   ```
+
+3. Upload the site from the repository folder on your PC (Windows 10/11 include `scp`):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\package-site.ps1
+   scp -r dist\site\* USER@SERVER-IP:/var/www/hardhatmediaplayer/
+   ```
+
+The firewall must allow ports 80 and 443 (`sudo ufw allow 80,443/tcp` if you use ufw).
+
+### c. Point the domain at your server
+
+At the company where you bought the domain, open the DNS settings for `hardhatmediaplayer.com`. If the domain
+and the hosting are at the same company, this is often already done; check with the commands below first.
+Otherwise **delete** any default `@` and `www` records (parking page, URL forwarding) and add:
+
+| Type  | Name / Host | Value |
+| ----- | ----------- | ----- |
+| A     | `@`   | your server's IPv4 address |
+| AAAA  | `@`   | your server's IPv6 address (only if it has one) |
+| CNAME | `www` | `hardhatmediaplayer.com` |
+
+If your host gave you **nameservers** (like `ns1.yourhost.com`) instead of an IP, put those under
+**Nameservers** at the registrar instead, and the host manages the records.
+
+Check (changes can take up to 24 hours to spread):
+
+```powershell
+Resolve-DnsName hardhatmediaplayer.com -Type A
+Resolve-DnsName www.hardhatmediaplayer.com
+```
+
+When the address is your server's, open <https://hardhatmediaplayer.com> and check the padlock.
+
+### Changing the site later
+
+1. Edit the files in `site/` and commit (the repository stays the source of the site).
+2. Run `scripts\package-site.ps1` again.
+3. Upload as in b1 (extract the new zip over the old files) or b2 (the same `scp` command).
+
+To add the real screenshot, save it as `site/screenshot.png` and replace the placeholder `<div>` in
+`index.html` as its comment describes.
+
+Downloads of the app itself stay on **GitHub Releases** (step 7); the site only links to them, so the ~260 MB
+files never use your server's traffic.
 
 ## 9. Day to day
 
