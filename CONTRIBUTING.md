@@ -14,7 +14,7 @@ Open an [issue](../../issues) and include:
 
 ## Building
 
-1. Install the [.NET 7 SDK](https://dotnet.microsoft.com/download/dotnet/7.0) (or newer) on Windows 10/11.
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (or newer) on Windows 10/11.
 2. Build and run:
 
    ```bash

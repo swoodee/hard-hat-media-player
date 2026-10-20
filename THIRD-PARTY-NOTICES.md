@@ -8,7 +8,7 @@ third-party work, each under its own license. All of these licenses are compatib
 | libVLC (VideoLAN.LibVLC.Windows) | Media playback engine, shipped as DLLs in `libvlc/` | LGPL-2.1-or-later | <https://code.videolan.org/videolan/vlc> |
 | LibVLCSharp, LibVLCSharp.WPF | .NET bindings for libVLC | LGPL-2.1-or-later | <https://code.videolan.org/videolan/LibVLCSharp> |
 | CommunityToolkit.Mvvm | MVVM helpers | MIT | <https://github.com/CommunityToolkit/dotnet> |
-| System.Security.Cryptography.ProtectedData | Encrypting the saved OpenSubtitles password | MIT | <https://github.com/dotnet/runtime> |
+| System.Security.Cryptography.ProtectedData (part of the .NET Windows Desktop runtime) | Encrypting the saved OpenSubtitles password | MIT | <https://github.com/dotnet/runtime> |
 | .NET / WPF | Runtime and UI framework | MIT | <https://github.com/dotnet> |
 | “VLC Redesign” Figma prototype by Juxtopposed | Interface design the UI is based on | CC BY 4.0 | <https://www.figma.com/community/file/1691465999134370980/vlc-redesign> |
 | Lucide-style icon shapes | Interface icons (redrawn) | ISC | <https://lucide.dev> |

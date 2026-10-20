@@ -28,7 +28,7 @@ A free, open-source media player for Windows, with a clean modern interface and 
 
 Releases will be published on the [Releases page](../../releases). Until then, build it yourself:
 
-1. Install the [.NET 7 SDK](https://dotnet.microsoft.com/download/dotnet/7.0) (or newer) on Windows 10/11.
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (or newer) on Windows 10/11.
 2. Clone the repository and run:
 
    ```bash
