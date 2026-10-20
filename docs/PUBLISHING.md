@@ -251,11 +251,12 @@ Open <https://hardhatmediaplayer.com> and check the padlock; `www.` should redir
 
 1. Edit the files in `site/` and commit (the repository stays the source of the site).
 2. Run `scripts\package-site.ps1` and the same `scp` command as in d.
-3. Cloudflare caches the CSS and icon for a while; if a change doesn't show, use **Caching → Configuration →
-   Purge Everything**.
+3. Cloudflare caches the CSS and images for a while. When you change `style.css`, raise the number in
+   `style.css?v=2` in `index.html`; for a replaced image, give the file a new name. Otherwise use
+   **Caching → Configuration → Purge Everything**.
 
-To add the real screenshot, save it as `site/screenshot.png` and replace the placeholder `<div>` in
-`index.html` as its comment describes.
+The screenshot (`site/screenshot.webp`, plus `screenshot-1000.webp` for phones) shows Big Buck Bunny, which is
+CC BY 3.0: keep the credit under it.
 
 Downloads of the app itself stay on **GitHub Releases** (step 7); the site only links to them, so the ~260 MB
 files never go through your home connection. If the server is off, the site is down too: Cloudflare shows an
