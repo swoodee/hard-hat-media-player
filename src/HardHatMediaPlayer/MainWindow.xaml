@@ -388,6 +388,19 @@
                         <ctl:Icon x:Name="CenterFlashIcon" Data="{StaticResource I.Pause}" Filled="True" Width="40" Height="40" Foreground="White"/>
                     </Border>
 
+                    <!-- Second (translation) subtitle at the top; libVLC draws the main one at the bottom -->
+                    <Border x:Name="TranslationBox" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="48,20,48,0" CornerRadius="8"
+                            Background="#A6000000" Padding="16,6,16,8" Cursor="Help"
+                            Visibility="{Binding Player.SecondSubtitleText, Converter={StaticResource Vis}}"
+                            MouseEnter="OnTranslationHover" MouseLeave="OnTranslationHover">
+                        <TextBlock x:Name="TranslationText" Text="{Binding Player.SecondSubtitleText}" TextWrapping="Wrap" TextAlignment="Center"
+                                   Foreground="#FFE7B0" FontWeight="SemiBold" FontSize="22">
+                            <TextBlock.Effect>
+                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
                     <!-- On-screen display: what just happened and its shortcut -->
                     <Border x:Name="OsdPill" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16,24,16,0" CornerRadius="12"
                             Background="#EB181818" BorderBrush="#2C2C2C" BorderThickness="1" Padding="16,10" Opacity="0" IsHitTestVisible="False">

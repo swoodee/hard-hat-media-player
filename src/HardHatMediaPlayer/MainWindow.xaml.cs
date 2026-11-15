@@ -49,6 +49,7 @@ public partial class MainWindow : Window, IUiServices
 
         _vm.PropertyChanged += OnViewModelChanged;
         _vm.Player.PropertyChanged += OnPlayerChanged;
+        UpdateTranslationBlur();
         _vm.FullscreenToggled += ToggleFullscreen;
         _vm.ShortcutsRequested += ToggleShortcuts;
         _vm.Player.Osd += ShowOsd;
@@ -284,6 +285,9 @@ public partial class MainWindow : Window, IUiServices
             case nameof(PlayerViewModel.IsMuted):
                 VolumeIcon.Data = (Geometry)FindResource(p.IsMuted || p.Volume == 0 ? "I.Mute" : p.Volume < 50 ? "I.VolumeLow" : "I.Volume");
                 MuteButton.ToolTip = p.IsMuted ? "Unmute (M)" : "Mute (M)";
+                break;
+            case nameof(PlayerViewModel.BlurTranslation):
+                UpdateTranslationBlur();
                 break;
             case nameof(PlayerViewModel.Repeat):
                 RepeatButton.Foreground = p.Repeat == RepeatMode.Off ? (Brush)FindResource("Text2Brush") : (Brush)FindResource("AccentBrush");
@@ -580,7 +584,13 @@ public partial class MainWindow : Window, IUiServices
                 case Key.OemOpenBrackets: p.Slower(); break;               // "["
                 case Key.OemCloseBrackets: p.Faster(); break;              // "]"
                 case Key.OemPlus when !shift: p.NormalSpeed(); break;      // "="
+                case Key.V when shift: p.CycleSecondSubtitle(); break;
                 case Key.V: p.CycleSubtitles(); break;
+                case Key.C: p.BlurTranslation = !p.BlurTranslation; break;
+                case Key.R: p.ReplayLine(); break;
+                case Key.A: p.PreviousLine(); break;
+                case Key.D: p.NextLine(); break;
+                case Key.E: p.AutoPause = !p.AutoPause; break;
                 case Key.B: p.CycleAudioTracks(); break;
                 case Key.Q: _vm.IsQueueOpen = !_vm.IsQueueOpen; break;
                 case Key.G: p.NudgeSubtitleDelay(-PlayerViewModel.DelayStepMs); break;
@@ -634,8 +644,25 @@ public partial class MainWindow : Window, IUiServices
 
     private QueueItem? _pressedQueueItem;
 
-    private void OnOverlaySizeChanged(object sender, SizeChangedEventArgs e) =>
+    private void OnOverlaySizeChanged(object sender, SizeChangedEventArgs e)
+    {
         QueuePanel.Width = Math.Clamp(e.NewSize.Width * 0.4, 220, 340);
+        // Sized like libVLC's own subtitles, which scale with the video.
+        TranslationText.FontSize = Math.Clamp(e.NewSize.Height * 0.042, 15, 44);
+        TranslationText.MaxWidth = Math.Max(200, e.NewSize.Width * 0.8);
+    }
+
+    // ---- Second subtitle ----
+
+    private static readonly System.Windows.Media.Effects.BlurEffect TranslationBlur = new() { Radius = 12 };
+
+    /// <summary>Blurred translations become readable while the pointer is over them.</summary>
+    private void OnTranslationHover(object sender, MouseEventArgs e) => UpdateTranslationBlur();
+
+    private void UpdateTranslationBlur() =>
+        TranslationText.Effect = _vm.Player.BlurTranslation && !TranslationBox.IsMouseOver
+            ? TranslationBlur
+            : new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 4, ShadowDepth = 1, Opacity = 0.8 };
 
     private void OnQueueRowPress(object sender, MouseButtonEventArgs e)
     {
@@ -767,6 +794,8 @@ public partial class MainWindow : Window, IUiServices
         OsdIcon.Visibility = OsdIcon.Data is null ? Visibility.Collapsed : Visibility.Visible;
         OsdLevel.Visibility = m.Level is null ? Visibility.Collapsed : Visibility.Visible;
         OsdLevelFill.Width = OsdLevel.Width * Math.Clamp(m.Level ?? 0, 0, 1);
+        // Below the translation line when one is showing, so neither covers the other.
+        OsdPill.Margin = new Thickness(16, TranslationBox.IsVisible ? TranslationBox.Margin.Top + TranslationBox.ActualHeight + 12 : 24, 16, 0);
 
         OsdPill.BeginAnimation(OpacityProperty, null);
         OsdPill.Opacity = 1;
@@ -807,9 +836,14 @@ public partial class MainWindow : Window, IUiServices
         new("Esc", "Leave fullscreen / close"),
         new("N  /  P", "Next / previous"),
         new("S", "Stop"),
-        new("[  /  ]", "Slower / faster"),
+        new("[  /  ]", "Slower / faster (0.1× steps)"),
         new("=", "Normal speed"),
         new("V", "Next subtitle track"),
+        new("Shift + V", "Second subtitle (translation) on / next"),
+        new("C", "Blur the translation (point at it to read)"),
+        new("R", "Replay the current line"),
+        new("A  /  D", "Previous / next subtitle line"),
+        new("E", "Pause after each line"),
         new("B", "Next audio track"),
         new("G  /  H", "Subtitle delay −50 / +50 ms"),
         new("J  /  K", "Audio delay −50 / +50 ms"),

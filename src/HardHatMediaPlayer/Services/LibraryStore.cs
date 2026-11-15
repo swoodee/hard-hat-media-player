@@ -61,6 +61,9 @@ public sealed class FolderPreset
 
     public string? AudioLanguage { get; set; }
     public string? AudioTrackName { get; set; }
+
+    /// <summary>Language of the second (translation) subtitle, the file name when it has none, or "off".</summary>
+    public string? SecondSubtitleLanguage { get; set; }
 }
 
 public sealed class LibraryData
@@ -92,6 +95,9 @@ public sealed class LibraryData
 
     /// <summary>libVLC audio output device id; null or empty for the system default.</summary>
     public string? AudioDevice { get; set; }
+
+    /// <summary>Blur the second (translation) subtitle until the pointer is over it.</summary>
+    public bool BlurTranslation { get; set; }
 }
 
 /// <summary>Library, playlists and history, persisted as JSON in %APPDATA%\HardHatMediaPlayer.</summary>

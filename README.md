@@ -12,8 +12,9 @@ A free, open-source media player for Windows, with a clean modern interface and 
 
 - **Plays almost anything** libVLC plays: local files, folders, network streams (http, rtsp, udp, …).
 - **Library**: Home (Continue Watching with resume points and thumbnails, Listen Again, frequent folders and
-  playlists), Videos (folders, episodes in natural order with autoplay), Music (songs, albums, artists, genres
-  from tags), Network, Playlists, History. Search, sort and right-click menus everywhere.
+  playlists; right-click an item to remove it from these lists), Videos (folders, episodes in natural order with
+  autoplay), Music (songs, albums, artists, genres from tags), Network, Playlists, History. Search, sort and
+  right-click menus everywhere.
 - **Player**: auto-hiding floating controls, seek and volume bars you can click or drag, shuffle, repeat,
   speed, subtitle and audio tracks, external subtitle files, true fullscreen (the taskbar gets out of the way).
 - **Subtitles and audio buttons** in the controls: tracks, subtitle and audio delay sliders (−5 s to +5 s), the
@@ -21,6 +22,8 @@ A free, open-source media player for Windows, with a clean modern interface and 
   folder starts the same way. See [Subtitles](#subtitles).
 - **On-screen feedback** for every action (volume, seeking, speed, tracks…) with the matching shortcut,
   and a keyboard cheat sheet on **F1** or **?**.
+- **For language learners**: a second subtitle at the top (e.g. English over Italian), optionally blurred until you
+  point at it, plus replay / previous / next line and pause after each line. See [Learning a language](#learning-a-language-two-subtitles-at-once).
 - **Online subtitles** (VLsub-style) from OpenSubtitles.com: search by file hash or by name, download, and
   optionally fetch exact matches automatically when a video has none. See [Subtitles](#subtitles).
 
@@ -55,8 +58,12 @@ You can pass files or folders on the command line, or drag them onto the window.
 | M | Mute |
 | F, F11, double-click | Fullscreen (Esc to leave) |
 | N / P / S | Next / previous / stop |
-| [ / ] / = | Slower / faster / normal speed |
+| [ / ] / = | Slower / faster (0.1× steps, 0.3×–3×) / normal speed |
 | V / B | Next subtitle track / next audio track |
+| Shift+V | Second subtitle (translation) on / next file |
+| C | Blur the translation (point at it to read it) |
+| R / A / D | Replay the current subtitle line / previous line / next line |
+| E | Pause after each subtitle line |
 | G / H | Subtitle delay −50 ms / +50 ms |
 | J / K | Audio delay −50 ms / +50 ms |
 | Q | Show or hide the play queue |
@@ -80,6 +87,20 @@ your own free API key:
 1. Create a free account at opensubtitles.com and get an API key at <https://www.opensubtitles.com/consumers>.
 2. In the Find subtitles window, choose **Account…** and paste the key. Username and password are optional and raise
    the daily download limit. The password is stored encrypted for your Windows account (DPAPI).
+
+### Learning a language: two subtitles at once
+
+Show the language you're learning at the bottom and a translation at the top, for example Italian below and English
+above. Pick the main subtitle as usual, then **subtitles button → Second subtitle (translation)** and choose a file
+(or press **Shift+V**). The second subtitle comes from a subtitle file (`.srt`, `.vtt`, `.ass` or `.ssa`): one next
+to the video (`video.en.srt`), one you choose, or one downloaded with **Find subtitles online**. Subtitles built into
+the video file can be the main subtitle but not the second one, because libVLC draws only one subtitle track.
+
+- **Blur the translation** (**C**): the top line stays blurred until you point at it, so you try the other language first.
+- **Line by line**: **R** replays the current line, **A** / **D** jump to the previous / next line, and
+  **E** pauses at the end of every line so you can read and repeat it (Space continues).
+- The second subtitle's language is remembered per folder, like the other subtitle choices. The subtitle delay
+  (**G / H**) moves both subtitles.
 
 ### Sync and presets
 

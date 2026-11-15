@@ -21,28 +21,28 @@ public sealed partial class MainViewModel
         if (watching.Count > 0)
         {
             rows.Add(new SectionRow { Title = "Continue Watching", Open = () => Panel.Navigate(ContinueWatchingPage) });
-            rows.AddRange(watching.Select(HistoryRow));
+            rows.AddRange(watching.Select(ContinueWatchingRow));
         }
 
         var listened = ListenAgain().Take(HomeSectionSize).ToList();
         if (listened.Count > 0)
         {
             rows.Add(new SectionRow { Title = "Listen Again", Open = () => Panel.Navigate(ListenAgainPage) });
-            rows.AddRange(listened.Select(HistoryRow));
+            rows.AddRange(listened.Select(ListenAgainRow));
         }
 
         var folders = FrequentFolders().Take(HomeSectionSize).ToList();
         if (folders.Count > 0)
         {
             rows.Add(new SectionRow { Title = "Frequently Visited Folders", Open = () => Panel.Navigate(FrequentFoldersPage) });
-            rows.AddRange(folders.Select(d => FolderRow(d)));
+            rows.AddRange(folders.Select(FrequentFolderRow));
         }
 
         var playlists = FrequentPlaylists().Take(HomeSectionSize).ToList();
         if (playlists.Count > 0)
         {
             rows.Add(new SectionRow { Title = "Frequently Visited Playlists", Open = () => Panel.Navigate(FrequentPlaylistsPage) });
-            rows.AddRange(playlists.Select(PlaylistRow));
+            rows.AddRange(playlists.Select(FrequentPlaylistRow));
         }
 
         if (rows.Count == 0)
@@ -72,28 +72,55 @@ public sealed partial class MainViewModel
     private PanelPage ContinueWatchingPage() => new()
     {
         Title = "Continue Watching", RailKey = "home",
-        Rows = ContinueWatching().Select(HistoryRow).ToList<PanelRow>(),
+        Rows = ContinueWatching().Select(ContinueWatchingRow).ToList<PanelRow>(),
         EmptyText = "Videos you stop part-way through show up here.",
     };
 
     private PanelPage ListenAgainPage() => new()
     {
         Title = "Listen Again", RailKey = "home",
-        Rows = ListenAgain().Select(HistoryRow).ToList<PanelRow>(),
+        Rows = ListenAgain().Select(ListenAgainRow).ToList<PanelRow>(),
         EmptyText = "Music you play shows up here.",
     };
 
     private PanelPage FrequentFoldersPage() => new()
     {
         Title = "Frequently Visited Folders", RailKey = "home",
-        Rows = FrequentFolders().Select(d => (PanelRow)FolderRow(d)).ToList(),
+        Rows = FrequentFolders().Select(d => (PanelRow)FrequentFolderRow(d)).ToList(),
     };
 
     private PanelPage FrequentPlaylistsPage() => new()
     {
         Title = "Frequently Visited Playlists", RailKey = "home",
-        Rows = FrequentPlaylists().Select(p => (PanelRow)PlaylistRow(p)).ToList(),
+        Rows = FrequentPlaylists().Select(p => (PanelRow)FrequentPlaylistRow(p)).ToList(),
     };
+
+    // Right-click "Remove" for the Home lists: takes the item off the list without deleting the file, folder or playlist.
+
+    /// <summary>Forgets the resume point (the video then starts from the beginning); it stays in History.</summary>
+    private ItemRow ContinueWatchingRow(HistoryEntry h) => HistoryRow(h, new MenuAction("Remove from Continue Watching", () =>
+    {
+        h.PositionMs = 0;
+        Store.Save();
+        Panel.Refresh();
+    }));
+
+    private ItemRow ListenAgainRow(HistoryEntry h) => HistoryRow(h, new MenuAction("Remove from Listen Again", () => RemoveHistory(h)));
+
+    /// <summary>Resets the folder's visit count; opening it again later brings it back.</summary>
+    private ItemRow FrequentFolderRow(string dir) => FolderRow(dir, new MenuAction("Remove from Frequently Visited", () =>
+    {
+        Store.Data.FolderVisits.Remove(dir);
+        Store.Save();
+        Panel.Refresh();
+    }));
+
+    private ItemRow FrequentPlaylistRow(Playlist p) => PlaylistRow(p, new MenuAction("Remove from Frequently Visited", () =>
+    {
+        p.Opens = 0;
+        Store.Save();
+        Panel.Refresh();
+    }));
 
     // ---- Videos & folders ----
 
@@ -286,14 +313,16 @@ public sealed partial class MainViewModel
         return new PanelPage { Id = "root:playlists", Title = "Playlists", RailKey = "playlists", Rows = rows };
     }
 
-    private ItemRow PlaylistRow(Playlist p) => new()
+    private ItemRow PlaylistRow(Playlist p) => PlaylistRow(p, Array.Empty<MenuAction>());
+
+    private ItemRow PlaylistRow(Playlist p, params MenuAction[] extra) => new()
     {
         Label = p.Name,
         Icon = Ico("Playlist"),
         Detail = p.Items.Count == 1 ? "1 item" : $"{p.Items.Count} items",
         Invoke = () => Panel.Navigate(() => PlaylistPage(p.Id)),
         DragPaths = () => p.Items.ToList(),
-        Menu = () => PlaylistMenu(p),
+        Menu = () => extra.Length == 0 ? PlaylistMenu(p) : PlaylistMenu(p).Append(MenuAction.Separator).Concat(extra).ToList(),
     };
 
     private PanelPage PlaylistPage(string id)
@@ -430,12 +459,12 @@ public sealed partial class MainViewModel
         Panel.Refresh();
     }
 
-    private ItemRow HistoryRow(HistoryEntry h)
+    private ItemRow HistoryRow(HistoryEntry h, params MenuAction[] extra)
     {
         string? detail = h.Kind == MediaKind.Video && h.IsUnfinished
             ? $"{PlayerViewModel.Format(h.DurationMs - h.PositionMs)} left"
             : null;
-        return MediaRow(h.Path, () => PlayInFolder(h.Path), detail);
+        return MediaRow(h.Path, () => PlayInFolder(h.Path), detail, extra);
     }
 
     // ---- Row and menu builders ----

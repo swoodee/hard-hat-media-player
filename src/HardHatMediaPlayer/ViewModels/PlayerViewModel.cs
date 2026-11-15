@@ -114,6 +114,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             Error = null;
         }, ui);
         _messageTimer.Stop();
+        InitLearning();
     }
 
     partial void OnHasVideoChanged(bool value) => RaiseCoverState();
@@ -209,7 +210,8 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     partial void OnRateChanged(float value)
     {
         Player.SetRate(value);
-        ShowOsd(Math.Abs(value - 1f) < 0.001f ? "Normal speed" : $"Speed {value:0.##}\u00d7", "[ slower  \u00b7  ] faster  \u00b7  = normal", "Speed");
+        ShowOsd(Math.Abs(value - 1f) < 0.001f ? "Normal speed" : $"Speed {value:0.0#}\u00d7", "[ slower  \u00b7  ] faster  \u00b7  = normal",
+            "Speed", (value - MinRate) / (MaxRate - MinRate));
     }
 
     partial void OnShuffleChanged(bool value) => ShowOsd(value ? "Shuffle on" : "Shuffle off", null, "Shuffle");
@@ -230,11 +232,18 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public void ShowOsd(string text, string? hint = null, string? icon = null, double? level = null) =>
         Osd?.Invoke(new OsdMessage(text, hint, icon, level));
 
-    private static readonly float[] Speeds = { 0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f };
+    public const float MinRate = 0.3f, MaxRate = 3f, RateStep = 0.1f;
 
-    public void Faster() => Rate = Speeds.FirstOrDefault(s => s > Rate + 0.001f, Speeds[^1]);
-    public void Slower() => Rate = Speeds.LastOrDefault(s => s < Rate - 0.001f, Speeds[0]);
+    public void Faster() => Rate = StepRate(1);
+    public void Slower() => Rate = StepRate(-1);
     public void NormalSpeed() => Rate = 1f;
+
+    /// <summary>The next 0.1 step up or down (from a menu speed like 1.25: 1.3 faster, 1.2 slower).</summary>
+    private float StepRate(int direction)
+    {
+        var steps = direction > 0 ? MathF.Floor(Rate / RateStep + 0.01f) + 1 : MathF.Ceiling(Rate / RateStep - 0.01f) - 1;
+        return Math.Clamp(MathF.Round(steps * RateStep, 1), MinRate, MaxRate);
+    }
 
     public void CycleSubtitles()
     {
@@ -438,6 +447,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         _tracksChosenByUser = false;
         _presetAnnounced = false;
         SetDelaysQuietly(0, 0);
+        ResetLearning();
         Kind = kind;
         HasVideo = false;
         Position = 0;
@@ -580,6 +590,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Subtitle = "";
         Artwork = null;
         Position = 0;
+        ResetLearning();
         _messageTimer.Stop();
         Error = null;
         QueueChanged();
@@ -766,7 +777,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         var preset = _store.EnsurePreset(dir);
         // A new preset starts from what's on screen now, so one change doesn't drop the others.
         if (preset.SubtitleLanguage is null && preset.SubtitleTrackName is null && preset.AudioLanguage is null && preset.AudioTrackName is null
-            && preset.SubtitleDelayMs == 0 && preset.AudioDelayMs == 0)
+            && preset.SecondSubtitleLanguage is null && preset.SubtitleDelayMs == 0 && preset.AudioDelayMs == 0)
         {
             preset.SubtitleDelayMs = SubtitleDelayMs;
             preset.AudioDelayMs = AudioDelayMs;
@@ -782,6 +793,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         if (_store.Data.AudioDevice is { Length: > 0 } device) Player.SetOutputDevice(device);
         _tracksSettleBy = DateTime.Now.AddSeconds(8);
         ApplyTrackPreferences();
+        ApplySecondSubtitlePreset();
     }
 
     /// <summary>Picks subtitle and audio tracks by language: the folder's choice first, then the default languages.</summary>
@@ -934,6 +946,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _timer.Stop();
+        _learnTimer?.Stop();
         SaveProgress();
         _disposed = true;
         var player = Player;

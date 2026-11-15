@@ -263,7 +263,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<MenuAction> PlaybackMenu()
     {
-        var speeds = new[] { 0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f };
+        var speeds = new[] { 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f };
         return new List<MenuAction>
         {
             new(Player.IsPlaying ? "Pause" : "Play", Player.TogglePlay, Gesture: "Space"),
@@ -299,9 +299,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }));
             if (Player.Kind == MediaKind.Video && File.Exists(Player.CurrentPath))
                 items.Add(new MenuAction("Find subtitles online…", () => _ui.ShowSubtitleSearch(Player.CurrentPath!)));
+            items.Add(MenuAction.Separator);
+            items.Add(new MenuAction("Second subtitle (translation)", Children: SecondSubtitleMenu(), Gesture: "Shift+V"));
+            items.Add(new MenuAction("Blur the translation", () => Player.BlurTranslation = !Player.BlurTranslation,
+                IsChecked: Player.BlurTranslation, Gesture: "C"));
+            items.Add(new MenuAction("Line by line", Children: new[]
+            {
+                new MenuAction("Replay the line", Player.ReplayLine, Gesture: "R"),
+                new MenuAction("Previous line", Player.PreviousLine, Gesture: "A"),
+                new MenuAction("Next line", Player.NextLine, Gesture: "D"),
+                MenuAction.Separator,
+                new MenuAction("Pause after each line", () => Player.AutoPause = !Player.AutoPause, IsChecked: Player.AutoPause, Gesture: "E"),
+            }));
+            items.Add(MenuAction.Separator);
         }
         items.Add(new MenuAction("Default languages…", () => EditLanguages(subtitles: true), Gesture: LanguagesLabel(Store.Data.SubtitleLanguages)));
         AddPresetItem(items);
+        return items;
+    }
+
+    /// <summary>Off, the subtitle files found for the video, and any other file.</summary>
+    private List<MenuAction> SecondSubtitleMenu()
+    {
+        var current = Player.SecondSubtitleFile;
+        var items = new List<MenuAction> { new("Off", () => Player.SetSecondSubtitle(null), IsChecked: current is null) };
+        items.AddRange(Player.SecondSubtitleCandidates.Select(f => new MenuAction(SubtitleFile.Label(f), () => Player.SetSecondSubtitle(f),
+            IsChecked: string.Equals(f, current, StringComparison.OrdinalIgnoreCase))));
+        if (current != null && !Player.SecondSubtitleCandidates.Contains(current, StringComparer.OrdinalIgnoreCase))
+            items.Add(new MenuAction(SubtitleFile.Label(current), IsChecked: true));
+        items.Add(MenuAction.Separator);
+        items.Add(new MenuAction("Choose file…", () =>
+        {
+            var f = _ui.PickFiles("Subtitles|*.srt;*.vtt;*.ass;*.ssa|All files|*.*", false);
+            if (f.Length > 0) Player.SetSecondSubtitle(f[0]);
+        }));
         return items;
     }
 
