@@ -17,6 +17,7 @@ A free, open-source media player for Windows, with a clean modern interface and 
   right-click menus everywhere.
 - **Player**: auto-hiding floating controls, seek and volume bars you can click or drag, shuffle, repeat,
   speed, subtitle and audio tracks, external subtitle files, true fullscreen (the taskbar gets out of the way).
+  Picture options (right-click the video): aspect ratio, crop away black bars, or fill the window; remembered per folder.
 - **Subtitles and audio buttons** in the controls: tracks, subtitle and audio delay sliders (−5 s to +5 s), the
   audio output device, and **per-folder presets**: pick a track or fix the sync once and the next episode in that
   folder starts the same way. See [Subtitles](#subtitles).
@@ -64,6 +65,9 @@ You can pass files or folders on the command line, or drag them onto the window.
 | C | Blur the translation (point at it to read it) |
 | R / A / D | Replay the current subtitle line / previous line / next line |
 | E | Pause after each subtitle line |
+| Shift+A | Aspect ratio (default, 16:9, 4:3, 21:9, 2.35:1, 1:1) |
+| Shift+C | Crop (16:9, 4:3, 1.85:1, 2.35:1, 21:9), then Fill window |
+| Right-click the video | Picture options |
 | G / H | Subtitle delay −50 ms / +50 ms |
 | J / K | Audio delay −50 ms / +50 ms |
 | Q | Show or hide the play queue |

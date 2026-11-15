@@ -251,6 +251,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         new("Find subtitles online…", FindSubtitles),
         MenuAction.Separator,
         new("Playback", Children: PlaybackMenu()),
+        new("Picture", Children: PictureMenu()),
         MenuAction.Separator,
         new("Show library panel", TogglePanel, IsChecked: IsPanelOpen, Gesture: "Ctrl+B"),
         new("Show queue", ToggleQueue, IsChecked: IsQueueOpen, Gesture: "Q"),
@@ -260,6 +261,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         new("About", ShowAbout),
         new("Exit", () => Application.Current.MainWindow?.Close(), Gesture: "Alt+F4"),
     };
+
+    /// <summary>Aspect ratio, crop and fill window: in the main menu and on right-click over the video.</summary>
+    public IReadOnlyList<MenuAction> PictureMenu()
+    {
+        var aspect = new List<MenuAction> { new("Default", () => Player.AspectRatio = null, IsChecked: Player.AspectRatio is null) };
+        aspect.AddRange(PlayerViewModel.AspectRatios.Select(r => new MenuAction(r, () => Player.AspectRatio = r, IsChecked: Player.AspectRatio == r)));
+        var crop = new List<MenuAction> { new("None", () => { Player.FillWindow = false; Player.Crop = null; }, IsChecked: Player.Crop is null && !Player.FillWindow) };
+        crop.AddRange(PlayerViewModel.Crops.Select(r => new MenuAction(r, () => Player.Crop = r, IsChecked: Player.Crop == r)));
+        return new List<MenuAction>
+        {
+            new("Aspect ratio", Children: aspect, Gesture: "Shift+A"),
+            new("Crop", Children: crop, Gesture: "Shift+C"),
+            new("Fill window (no black bars)", () => Player.FillWindow = !Player.FillWindow, IsChecked: Player.FillWindow),
+        };
+    }
 
     public IReadOnlyList<MenuAction> PlaybackMenu()
     {

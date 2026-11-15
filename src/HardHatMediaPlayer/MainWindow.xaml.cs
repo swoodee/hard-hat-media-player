@@ -343,6 +343,23 @@ public partial class MainWindow : Window, IUiServices
         }
     }
 
+    /// <summary>Right-click on the video: picture options.</summary>
+    private void OnOverlayRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!_vm.Player.HasMedia || e.OriginalSource is DependencyObject d && FindParent<ButtonBase>(d) != null) return;
+        e.Handled = true;
+        _hideControls.Stop();
+        _openMenu = MenuBuilder.Show(_vm.PictureMenu(), Overlay, PlacementMode.MousePoint);
+        _openMenu.Closed += (_, _) => ShowControls();
+    }
+
+    private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+    {
+        for (var d = child; d != null; d = VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d))
+            if (d is T found) return found;
+        return null;
+    }
+
     private void OnOverlayWheel(object sender, MouseWheelEventArgs e)
     {
         if (e.OriginalSource is DependencyObject d && IsInside(d, QueuePanel)) return; // scrolling the queue
@@ -586,8 +603,10 @@ public partial class MainWindow : Window, IUiServices
                 case Key.OemPlus when !shift: p.NormalSpeed(); break;      // "="
                 case Key.V when shift: p.CycleSecondSubtitle(); break;
                 case Key.V: p.CycleSubtitles(); break;
+                case Key.C when shift: p.CycleCrop(); break;
                 case Key.C: p.BlurTranslation = !p.BlurTranslation; break;
                 case Key.R: p.ReplayLine(); break;
+                case Key.A when shift: p.CycleAspectRatio(); break;
                 case Key.A: p.PreviousLine(); break;
                 case Key.D: p.NextLine(); break;
                 case Key.E: p.AutoPause = !p.AutoPause; break;
@@ -650,6 +669,7 @@ public partial class MainWindow : Window, IUiServices
         // Sized like libVLC's own subtitles, which scale with the video.
         TranslationText.FontSize = Math.Clamp(e.NewSize.Height * 0.042, 15, 44);
         TranslationText.MaxWidth = Math.Max(200, e.NewSize.Width * 0.8);
+        _vm.Player.SetViewSize(e.NewSize.Width, e.NewSize.Height);
     }
 
     // ---- Second subtitle ----
@@ -844,6 +864,9 @@ public partial class MainWindow : Window, IUiServices
         new("R", "Replay the current line"),
         new("A  /  D", "Previous / next subtitle line"),
         new("E", "Pause after each line"),
+        new("Shift + A", "Aspect ratio"),
+        new("Shift + C", "Crop / fill window"),
+        new("Right-click video", "Picture options"),
         new("B", "Next audio track"),
         new("G  /  H", "Subtitle delay −50 / +50 ms"),
         new("J  /  K", "Audio delay −50 / +50 ms"),

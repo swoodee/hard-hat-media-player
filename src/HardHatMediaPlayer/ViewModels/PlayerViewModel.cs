@@ -99,7 +99,12 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         Player.Stopped += (_, _) => _ui.BeginInvoke(() => IsPlaying = false);
         Player.EndReached += (_, _) => _ui.BeginInvoke(OnEnded);
         Player.EncounteredError += (_, _) => _ui.BeginInvoke(OnError);
-        Player.Vout += (_, e) => _ui.BeginInvoke(() => HasVideo = e.Count > 0);
+        Player.Vout += (_, e) => _ui.BeginInvoke(() =>
+        {
+            HasVideo = e.Count > 0;
+            // The video output can appear after playback started; it doesn't pick up earlier picture settings.
+            if (e.Count > 0) ApplyPicture();
+        });
         // Tracks keep arriving after playback starts (embedded ones, then "video.lang.srt" next to it).
         Player.ESAdded += (_, e) =>
         {
@@ -779,7 +784,8 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         var preset = _store.EnsurePreset(dir);
         // A new preset starts from what's on screen now, so one change doesn't drop the others.
         if (preset.SubtitleLanguage is null && preset.SubtitleTrackName is null && preset.AudioLanguage is null && preset.AudioTrackName is null
-            && preset.SecondSubtitleLanguage is null && preset.SubtitleDelayMs == 0 && preset.AudioDelayMs == 0)
+            && preset.SecondSubtitleLanguage is null && preset.SubtitleDelayMs == 0 && preset.AudioDelayMs == 0
+            && preset.AspectRatio is null && preset.Crop is null && !preset.FillWindow)
         {
             preset.SubtitleDelayMs = SubtitleDelayMs;
             preset.AudioDelayMs = AudioDelayMs;
@@ -796,6 +802,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         _tracksSettleBy = DateTime.Now.AddSeconds(8);
         ApplyTrackPreferences();
         ApplySecondSubtitlePreset();
+        ApplyPicturePreset();
     }
 
     /// <summary>Picks subtitle and audio tracks by language: the folder's choice first, then the default languages.</summary>

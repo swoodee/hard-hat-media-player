@@ -64,6 +64,11 @@ public sealed class FolderPreset
 
     /// <summary>Language of the second (translation) subtitle, the file name when it has none, or "off".</summary>
     public string? SecondSubtitleLanguage { get; set; }
+
+    /// <summary>Picture: forced aspect ratio, crop ratio (null for none) and "fill window".</summary>
+    public string? AspectRatio { get; set; }
+    public string? Crop { get; set; }
+    public bool FillWindow { get; set; }
 }
 
 public sealed class LibraryData

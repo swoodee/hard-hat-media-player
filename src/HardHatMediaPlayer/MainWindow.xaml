@@ -331,7 +331,7 @@
             <vlc:VideoView x:Name="Video" Grid.Column="2" Background="Black">
                 <Grid x:Name="Overlay" Background="#01000000" AllowDrop="True" Drop="OnDrop"
                       TextElement.Foreground="{StaticResource TextBrush}" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="13"
-                      MouseMove="OnOverlayMouseMove" MouseLeftButtonDown="OnOverlayClick" MouseWheel="OnOverlayWheel" SizeChanged="OnOverlaySizeChanged">
+                      MouseMove="OnOverlayMouseMove" MouseLeftButtonDown="OnOverlayClick" MouseRightButtonUp="OnOverlayRightClick" MouseWheel="OnOverlayWheel" SizeChanged="OnOverlaySizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
