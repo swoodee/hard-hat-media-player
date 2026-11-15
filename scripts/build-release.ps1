@@ -36,6 +36,10 @@ if ($LASTEXITCODE) { throw 'dotnet publish failed' }
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $publish 'LICENSE.txt')
 Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $publish
 
+# Ship libVLC's plugin cache so the first start doesn't open (and have Defender scan) every plugin DLL.
+$gen = Start-Process (Join-Path $publish 'HardHatMediaPlayer.exe') -ArgumentList '--generate-plugin-cache' -Wait -PassThru
+if ($gen.ExitCode -ne 0 -or -not (Test-Path (Join-Path $publish 'libvlc\win-x64\plugins\plugins.dat'))) { throw 'Could not generate the libVLC plugin cache' }
+
 $zip = Join-Path $artifacts "HardHatMediaPlayer-$Version-portable-win-x64.zip"
 Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip
 
