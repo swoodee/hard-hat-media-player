@@ -12,8 +12,9 @@ public partial class App : Application
         Core.Initialize();
         if (e.Args is [PluginCache.GenerateSwitch])
         {
-            using (new LibVLC("--reset-plugins-cache")) { }
-            Shutdown(PluginCache.Exists ? 0 : 1);
+            using (new LibVLC(PluginCache.RebuildOptions)) { }
+            PluginCache.Stamp();
+            Shutdown(PluginCache.NeedsRebuild() ? 1 : 0);
             return;
         }
         var window = new MainWindow(e.Args);

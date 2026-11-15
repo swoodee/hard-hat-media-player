@@ -83,8 +83,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         _ui = ui;
         // --no-osd: libVLC would otherwise print messages on the video, e.g. the file path of every
         // thumbnail snapshot. The app shows its own feedback; subtitles are unaffected.
+        var rebuildCache = PluginCache.NeedsRebuild();
         LibVLC = new LibVLC(new[] { "--no-video-title-show", "--no-snapshot-preview", "--no-osd" }
-            .Concat(PluginCache.Options).ToArray());
+            .Concat(rebuildCache ? PluginCache.RebuildOptions : Array.Empty<string>()).ToArray());
+        if (rebuildCache) PluginCache.Stamp();
         Player = new MediaPlayer(LibVLC) { EnableHardwareDecoding = true };
 
         Player.Playing += (_, _) => _ui.BeginInvoke(OnPlaying);

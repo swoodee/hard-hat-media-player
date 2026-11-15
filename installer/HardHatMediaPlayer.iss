@@ -49,6 +49,9 @@ OutputDir={#OutputDir}
 OutputBaseFilename=HardHatMediaPlayer-{#AppVersion}-setup-win-x64
 ChangesAssociations=yes
 CloseApplications=yes
+; Keep the files' dates exactly as built: libVLC's plugin cache records them, and local-time dates would shift
+; by the difference between the build machine's time zone (UTC on GitHub) and the user's.
+TimeStampsInUTC=yes
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
